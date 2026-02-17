@@ -72,12 +72,12 @@
                     icon: "👤",
                     color: "from-blue-500 to-indigo-600",
                     tasks: [
-                        { action: "Open Accuro", accuroStep: "Patient → New Patient (Ctrl+N)", time: "10 sec" },
+                        { action: "Open Accuro", accuroStep: "Patient → New Patient (F6)", time: "10 sec" },
                         { action: "Enter demographics", accuroStep: "Fill: Name, DOB, Sex, Health Card #", time: "2 min" },
                         { action: "Add contact info", accuroStep: "Enter: Phone, Email, Address", time: "1 min" },
                         { action: "Add emergency contact", accuroStep: "Emergency Contact section", time: "1 min" },
                         { action: "Assign to provider", accuroStep: "Select Family Physician", time: "30 sec" },
-                        { action: "Save record", accuroStep: "Click Save (Ctrl+S)", time: "5 sec" }
+                        { action: "Save record", accuroStep: "Click Save", time: "5 sec" }
                     ],
                     outcome: "Patient registered in system with chart number",
                     nextAction: "Book appointment"
@@ -89,7 +89,7 @@
                     icon: "📅",
                     color: "from-purple-500 to-pink-600",
                     tasks: [
-                        { action: "Open scheduler", accuroStep: "Click Scheduler (Ctrl+Shift+S)", time: "10 sec" },
+                        { action: "Open scheduler", accuroStep: "Click Scheduler (Ctrl+2)", time: "10 sec" },
                         { action: "Find appropriate time slot", accuroStep: "Navigate to requested date/time", time: "30 sec" },
                         { action: "Create appointment", accuroStep: "Right-click slot → New Appointment", time: "10 sec" },
                         { action: "Search patient", accuroStep: "Type patient name, select from list", time: "20 sec" },
@@ -108,7 +108,7 @@
                     color: "from-amber-500 to-orange-600",
                     tasks: [
                         { action: "Print Day Sheet", accuroStep: "Reports → Day Sheet → Print", time: "2 min" },
-                        { action: "Pull patient chart", accuroStep: "Search patient (Ctrl+F) → Open chart", time: "30 sec" },
+                        { action: "Pull patient chart", accuroStep: "Search patient (F1) → Open chart", time: "30 sec" },
                         { action: "Review appointment reason", accuroStep: "Check appointment notes", time: "1 min" },
                         { action: "Prepare new patient forms", accuroStep: "Forms → New Patient Package → Print", time: "2 min" },
                         { action: "Set up exam room", accuroStep: "N/A - Physical preparation", time: "3 min" }
@@ -139,7 +139,7 @@
                     icon: "📝",
                     color: "from-cyan-500 to-blue-600",
                     tasks: [
-                        { action: "Create new encounter", accuroStep: "Open chart → New Encounter (Ctrl+E)", time: "20 sec" },
+                        { action: "Create new encounter", accuroStep: "Open chart → New Encounter", time: "20 sec" },
                         { action: "Record vitals", accuroStep: "Enter: BP, HR, Temp, Weight, Height", time: "3 min" },
                         { action: "Document chief complaint", accuroStep: "Subjective section: Patient's reason for visit", time: "2 min" },
                         { action: "Enter medical history", accuroStep: "Add Problems, Medications, Allergies", time: "10 min" },
@@ -175,7 +175,7 @@
                     color: "from-fuchsia-500 to-pink-600",
                     tasks: [
                         { action: "Determine follow-up timing", accuroStep: "Check provider's plan notes", time: "30 sec" },
-                        { action: "Open scheduler", accuroStep: "Scheduler (Ctrl+Shift+S)", time: "10 sec" },
+                        { action: "Open scheduler", accuroStep: "Scheduler (Ctrl+2)", time: "10 sec" },
                         { action: "Find appropriate slot", accuroStep: "Navigate to future date per plan", time: "30 sec" },
                         { action: "Book follow-up", accuroStep: "Create appointment, Type: Follow-up", time: "1 min" },
                         { action: "Set reminder", accuroStep: "Enable appointment reminder", time: "30 sec" },

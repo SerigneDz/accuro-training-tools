@@ -1,0 +1,2114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Accuro Training - Admin Panel</title>
+    
+    <!-- Firebase v9 -->
+    <script type="module">
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
+        import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut, sendPasswordResetEmail } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
+        import { getFirestore, collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, query, where, orderBy, onSnapshot, serverTimestamp, arrayUnion, arrayRemove } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+        
+        window.firebaseModules = {
+            initializeApp, getAuth, onAuthStateChanged, signOut, getFirestore,
+            collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc,
+            query, where, orderBy, onSnapshot, serverTimestamp, arrayUnion, arrayRemove, signInWithEmailAndPassword, sendPasswordResetEmail
+        };
+    </script>
+    
+    <!-- React -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- SortableJS for drag-drop -->
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
+    
+    <style>
+        body { margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+        #root { min-height: 100vh; }
+        .sortable-ghost { opacity: 0.4; background: #e0e7ff; }
+        .sortable-drag { cursor: grabbing !important; }
+        
+        /* Toast animation */
+        @keyframes slideIn {
+            from {
+                transform: translateX(400px);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+        .animate-slide-in {
+            animation: slideIn 0.3s ease-out;
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+    
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+        
+        // ============================================
+        // FIREBASE CONFIGURATION
+        // ============================================
+       const firebaseConfig = {
+  	apiKey: "AIzaSyDtSuwTZnlvoWSz0E-imfMpV2etikcD7XA",
+  	authDomain: "accuro-trainer.firebaseapp.com",
+  	projectId: "accuro-trainer",
+  	storageBucket: "accuro-trainer.firebasestorage.app",
+  	messagingSenderId: "774405600835",
+  	appId: "1:774405600835:web:c3c5d5334c615f113946f6",
+  	measurementId: "G-2KMSC5WEMM"
+	};
+        
+        const { initializeApp, getAuth, getFirestore } = window.firebaseModules;
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        
+        // ============================================
+        // ICONS
+        // ============================================
+        const Icons = {
+            Home: ({ className }) => (
+                <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                </svg>
+            ),
+            Journey: ({ className }) => (
+                <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+            ),
+            Users: ({ className }) => (
+                <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+                </svg>
+            ),
+            Analytics: ({ className }) => (
+                <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                </svg>
+            ),
+            Plus: ({ className }) => (
+                <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+            ),
+            Edit: ({ className }) => (
+                <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                </svg>
+            ),
+            Trash: ({ className }) => (
+                <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+            ),
+            GripVertical: ({ className }) => (
+                <svg className={className} fill="currentColor" viewBox="0 0 24 24">
+                    <circle cx="9" cy="5" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="19" r="1"/>
+                    <circle cx="15" cy="5" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="19" r="1"/>
+                </svg>
+            ),
+            ChevronDown: ({ className }) => (
+                <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+            ),
+            LogOut: ({ className }) => (
+                <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                </svg>
+            ),
+            Settings: ({ className }) => (
+                <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+            )
+        };
+        
+        // ============================================
+        // DASHBOARD
+        // ============================================
+        function Dashboard({ stats, setCurrentView }) {
+            return (
+                <div className="p-8">
+                    <h1 className="text-3xl font-bold text-gray-800 mb-8">📊 Admin Dashboard</h1>
+                    
+                    {/* Stats Cards */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                        <div className="bg-white rounded-xl shadow-lg p-6 border-l-4 border-blue-500">
+                            <div className="text-sm text-gray-600 mb-1">Total Users</div>
+                            <div className="text-3xl font-bold text-gray-800">{stats.totalUsers || 0}</div>
+                            <div className="text-xs text-green-600 mt-2">↑ Active learners</div>
+                        </div>
+                        
+                        <div className="bg-white rounded-xl shadow-lg p-6 border-l-4 border-purple-500">
+                            <div className="text-sm text-gray-600 mb-1">Published Journeys</div>
+                            <div className="text-3xl font-bold text-gray-800">{stats.publishedJourneys || 0}</div>
+                            <div className="text-xs text-gray-500 mt-2">Across all specialties</div>
+                        </div>
+                        
+                        <div className="bg-white rounded-xl shadow-lg p-6 border-l-4 border-green-500">
+                            <div className="text-sm text-gray-600 mb-1">Avg. Completion</div>
+                            <div className="text-3xl font-bold text-gray-800">{stats.avgCompletion || 0}%</div>
+                            <div className="text-xs text-green-600 mt-2">↑ +5% this month</div>
+                        </div>
+                        
+                        <div className="bg-white rounded-xl shadow-lg p-6 border-l-4 border-orange-500">
+                            <div className="text-sm text-gray-600 mb-1">Total Steps</div>
+                            <div className="text-3xl font-bold text-gray-800">{stats.totalSteps || 0}</div>
+                            <div className="text-xs text-gray-500 mt-2">Learning modules</div>
+                        </div>
+                    </div>
+                    
+                    {/* Quick Actions */}
+                    <div className="bg-white rounded-xl shadow-lg p-6">
+                        <h2 className="text-xl font-bold text-gray-800 mb-4">🚀 Quick Actions</h2>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <button 
+                                onClick={() => setCurrentView('journeys')}
+                                className="p-4 bg-gradient-to-r from-blue-500 to-indigo-600 text-white rounded-lg hover:from-blue-600 hover:to-indigo-700 transition"
+                            >
+                                <Icons.Plus className="w-6 h-6 mx-auto mb-2" />
+                                <div className="font-semibold">Create New Journey</div>
+                            </button>
+                            <button 
+                                onClick={() => setCurrentView('users')}
+                                className="p-4 bg-gradient-to-r from-purple-500 to-pink-600 text-white rounded-lg hover:from-purple-600 hover:to-pink-700 transition"
+                            >
+                                <Icons.Users className="w-6 h-6 mx-auto mb-2" />
+                                <div className="font-semibold">Manage Users</div>
+                            </button>
+                            <button 
+                                onClick={() => setCurrentView('analytics')}
+                                className="p-4 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-lg hover:from-green-600 hover:to-emerald-700 transition"
+                            >
+                                <Icons.Analytics className="w-6 h-6 mx-auto mb-2" />
+                                <div className="font-semibold">View Reports</div>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+        
+        // ============================================
+        // JOURNEY MANAGEMENT
+        // ============================================
+        function JourneyManagement({ showToast }) {
+            const [journeys, setJourneys] = useState([]);
+            const [loading, setLoading] = useState(true);
+            const [editingJourney, setEditingJourney] = useState(null);
+            
+            useEffect(() => {
+                loadJourneys();
+            }, []);
+            
+            const loadJourneys = async () => {
+                const { collection, getDocs } = window.firebaseModules;
+                const querySnapshot = await getDocs(collection(db, 'journeys'));
+                const journeyData = querySnapshot.docs.map(doc => ({
+                    id: doc.id,
+                    ...doc.data()
+                }));
+                setJourneys(journeyData);
+                setLoading(false);
+            };
+            
+            const createNewJourney = () => {
+                setEditingJourney({
+                    id: null,
+                    specialty: 'nurse',
+                    title: '',
+                    description: '',
+                    status: 'draft',
+                    stepIds: []
+                });
+            };
+            
+            const deleteJourney = async (journeyId) => {
+                if (!confirm('Are you sure? This will delete the journey and all its data.')) return;
+                
+                const { doc, deleteDoc } = window.firebaseModules;
+                await deleteDoc(doc(db, 'journeys', journeyId));
+                loadJourneys();
+            };
+            
+            if (loading) return <div className="p-8">Loading...</div>;
+            
+            if (editingJourney) {
+                return <JourneyEditor journey={editingJourney} onClose={() => { setEditingJourney(null); loadJourneys(); }} showToast={showToast} />;
+            }
+            
+            return (
+                <div className="p-8">
+                    <div className="flex justify-between items-center mb-8">
+                        <h1 className="text-3xl font-bold text-gray-800">🗺️ Journey Management</h1>
+                        <button
+                            onClick={createNewJourney}
+                            className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-blue-500 to-indigo-600 text-white rounded-lg hover:from-blue-600 hover:to-indigo-700 transition font-semibold"
+                        >
+                            <Icons.Plus className="w-5 h-5" />
+                            Create New Journey
+                        </button>
+                    </div>
+                    
+                    <div className="grid gap-6">
+                        {journeys.map(journey => (
+                            <div key={journey.id} className="bg-white rounded-xl shadow-lg p-6 hover:shadow-xl transition">
+                                <div className="flex justify-between items-start">
+                                    <div className="flex-1">
+                                        <div className="flex items-center gap-3 mb-2">
+                                            <h3 className="text-2xl font-bold text-gray-800">{journey.title}</h3>
+                                            <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                                                journey.status === 'published' 
+                                                    ? 'bg-green-100 text-green-700' 
+                                                    : 'bg-yellow-100 text-yellow-700'
+                                            }`}>
+                                                {journey.status === 'published' ? '✓ Published' : '📝 Draft'}
+                                            </span>
+                                        </div>
+                                        <p className="text-gray-600 mb-3">{journey.description}</p>
+                                        <div className="flex gap-4 text-sm text-gray-500">
+                                            <span>🎯 Specialty: <strong>{journey.specialty}</strong></span>
+                                            <span>📚 Steps: <strong>{journey.stepIds?.length || 0}</strong></span>
+                                        </div>
+                                    </div>
+                                    
+                                    <div className="flex gap-2">
+                                        <button
+                                            onClick={() => setEditingJourney(journey)}
+                                            className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition"
+                                        >
+                                            <Icons.Edit className="w-5 h-5" />
+                                        </button>
+                                        <button
+                                            onClick={() => deleteJourney(journey.id)}
+                                            className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition"
+                                        >
+                                            <Icons.Trash className="w-5 h-5" />
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                    
+                    {journeys.length === 0 && (
+                        <div className="text-center py-12 bg-white rounded-xl">
+                            <div className="text-6xl mb-4">📚</div>
+                            <h3 className="text-xl font-bold text-gray-800 mb-2">No Journeys Yet</h3>
+                            <p className="text-gray-600 mb-6">Create your first training journey to get started!</p>
+                            <button
+                                onClick={createNewJourney}
+                                className="px-6 py-3 bg-gradient-to-r from-blue-500 to-indigo-600 text-white rounded-lg hover:from-blue-600 hover:to-indigo-700 transition font-semibold"
+                            >
+                                Create Journey
+                            </button>
+                        </div>
+                    )}
+                </div>
+            );
+        }
+        
+        // ============================================
+        // JOURNEY EDITOR (with drag-drop steps)
+        // ============================================
+        function JourneyEditor({ journey, onClose, showToast }) {
+            const [formData, setFormData] = useState(journey);
+            const [steps, setSteps] = useState([]);
+            const [loading, setLoading] = useState(true);
+            const [saving, setSaving] = useState(false);
+            const [attachments, setAttachments] = useState(journey.attachments || []);
+            const [newAttachment, setNewAttachment] = useState({ name: '', url: '' });
+            const [editingStep, setEditingStep] = useState(null);
+            const stepsListRef = useRef(null);
+            
+            useEffect(() => {
+                loadSteps();
+            }, []);
+            
+            useEffect(() => {
+                if (stepsListRef.current && steps.length > 0) {
+                    const sortable = Sortable.create(stepsListRef.current, {
+                        animation: 150,
+                        handle: '.drag-handle',
+                        onEnd: (evt) => {
+                            const reordered = [...steps];
+                            const [removed] = reordered.splice(evt.oldIndex, 1);
+                            reordered.splice(evt.newIndex, 0, removed);
+                            reordered.forEach((step, index) => {
+                                step.order = index + 1;
+                            });
+                            setSteps(reordered);
+                        }
+                    });
+                    return () => sortable.destroy();
+                }
+            }, [steps]);
+            
+            const loadSteps = async () => {
+                if (!formData.stepIds || formData.stepIds.length === 0) {
+                    setLoading(false);
+                    return;
+                }
+                
+                const { doc, getDoc } = window.firebaseModules;
+                const stepsPromises = formData.stepIds.map(stepId => getDoc(doc(db, 'steps', stepId)));
+                const stepsDocs = await Promise.all(stepsPromises);
+                const stepsData = stepsDocs
+                    .filter(doc => doc.exists())
+                    .map(doc => ({ id: doc.id, ...doc.data() }))
+                    .sort((a, b) => a.order - b.order);
+                
+                setSteps(stepsData);
+                setLoading(false);
+            };
+            
+            const saveJourney = async (closeAfter = false) => {
+    		if (saving) return; // Prevent double-save
+    		setSaving(true);
+    		
+    		const { doc, setDoc, updateDoc, serverTimestamp } = window.firebaseModules;
+    
+    		try {
+        		const journeyData = {
+            		specialty: formData.specialty,
+            		title: formData.title,
+            		description: formData.description,
+            		status: formData.status,
+            		stepIds: steps.map(s => s.id),
+            		attachments: attachments,
+            		lastModified: serverTimestamp()
+        	};
+        
+        	if (!formData.id) {
+            		// New journey
+            		const newId = 'journey_' + Date.now();
+            		journeyData.createdAt = serverTimestamp();
+            		await setDoc(doc(db, 'journeys', newId), journeyData);
+        	} else {
+            		// Update existing journey
+            		await updateDoc(doc(db, 'journeys', formData.id), journeyData);
+        	}
+        
+        	// Update step orders
+        	for (const step of steps) {
+            		if (step.id) {  // Only update existing steps
+                		await updateDoc(doc(db, 'steps', step.id), { order: step.order });
+            		}
+        	}
+        
+        	showToast('Journey saved successfully!');
+        	setSaving(false); // Reset saving state
+        	
+        	if (closeAfter) {
+        	    onClose();
+        	}
+        
+   		} catch (error) {
+        		console.error('Error saving journey:', error);
+        		showToast('Error saving journey: ' + error.message, 'error');
+        		setSaving(false);
+    		}
+		};
+            
+            const createNewStep = () => {
+                setEditingStep({
+                    id: null,
+                    title: '',
+                    phase: '',
+                    icon: '📌',
+                    color: 'from-blue-500 to-indigo-600',
+                    outcome: '',
+                    nextAction: '',
+                    order: steps.length + 1,
+                    taskIds: []
+                });
+            };
+            
+            const addStepToJourney = (step) => {
+                // Check if step already exists (editing) or is new
+                const existingIndex = steps.findIndex(s => s.id === step.id);
+                
+                if (existingIndex >= 0) {
+                    // Update existing step
+                    const updatedSteps = [...steps];
+                    updatedSteps[existingIndex] = step;
+                    setSteps(updatedSteps);
+                } else {
+                    // Add new step
+                    setSteps([...steps, step]);
+                }
+                
+                setEditingStep(null);
+            };
+            
+            const deleteStep = async (stepId) => {
+                if (!confirm('Delete this step?')) return;
+                setSteps(steps.filter(s => s.id !== stepId));
+            };
+            
+            const addAttachment = () => {
+                if (!newAttachment.name.trim() || !newAttachment.url.trim()) {
+                    showToast('Please enter both name and URL', 'error');
+                    return;
+                }
+                
+                // Basic URL validation
+                try {
+                    new URL(newAttachment.url);
+                } catch (e) {
+                    showToast('Please enter a valid URL (must start with http:// or https://)', 'error');
+                    return;
+                }
+                
+                setAttachments([...attachments, {
+                    name: newAttachment.name.trim(),
+                    url: newAttachment.url.trim(),
+                    addedAt: new Date().toISOString()
+                }]);
+                
+                showToast('Link added successfully!');
+                setNewAttachment({ name: '', url: '' });
+            };
+            
+            const deleteAttachment = (index) => {
+                if (!confirm('Remove this link?')) return;
+                const newAttachments = attachments.filter((_, i) => i !== index);
+                setAttachments(newAttachments);
+            };
+            
+            if (editingStep) {
+                return <StepEditor step={editingStep} onSave={addStepToJourney} onClose={() => setEditingStep(null)} showToast={showToast} />;
+            }
+            
+            return (
+                <div className="p-8 max-w-5xl mx-auto">
+                    <div className="flex justify-between items-center mb-8">
+                        <h1 className="text-3xl font-bold text-gray-800">
+                            {formData.id ? '✏️ Edit Journey' : '➕ Create Journey'}
+                        </h1>
+                        <div className="flex gap-2">
+                            <button 
+                                onClick={onClose} 
+                                className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg transition"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={() => saveJourney(false)}
+                                disabled={saving}
+                                className={`px-4 py-2 rounded-lg font-semibold transition ${
+                                    saving 
+                                        ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                                        : 'bg-blue-500 text-white hover:bg-blue-600'
+                                }`}
+                            >
+                                {saving ? '⏳' : '💾'} Save
+                            </button>
+                            <button
+                                onClick={() => saveJourney(true)}
+                                disabled={saving}
+                                className={`px-4 py-2 rounded-lg font-semibold transition ${
+                                    saving 
+                                        ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                                        : 'bg-green-500 text-white hover:bg-green-600'
+                                }`}
+                            >
+                                {saving ? '⏳' : '✓'} Save & Close
+                            </button>
+                        </div>
+                    </div>
+                    
+                    {/* Journey Details Form */}
+                    <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
+                        <h2 className="text-xl font-bold text-gray-800 mb-4">Journey Details</h2>
+                        
+                        <div className="grid gap-4">
+                            <div>
+                                <label className="block text-sm font-semibold text-gray-700 mb-2">Title</label>
+                                <input
+                                    type="text"
+                                    value={formData.title}
+                                    onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                                    className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:border-blue-500 focus:outline-none"
+                                    placeholder="e.g., Nurse Workflow - Patient Journey"
+                                />
+                            </div>
+                            
+                            <div>
+                                <label className="block text-sm font-semibold text-gray-700 mb-2">Description</label>
+                                <textarea
+                                    value={formData.description}
+                                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                                    className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:border-blue-500 focus:outline-none"
+                                    rows="3"
+                                    placeholder="Brief description of this journey"
+                                />
+                            </div>
+                            
+                            {/* Link Attachments Section */}
+                            <div>
+                                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                                    🔗 Policies & Processes Links
+                                    <span className="text-xs text-gray-500 font-normal ml-2">(Google Drive, SharePoint, etc.)</span>
+                                </label>
+                                
+                                {/* Add Link Form */}
+                                <div className="border-2 border-gray-300 rounded-lg p-4 bg-gray-50 mb-3">
+                                    <div className="grid md:grid-cols-2 gap-3 mb-3">
+                                        <input
+                                            type="text"
+                                            value={newAttachment.name}
+                                            onChange={(e) => setNewAttachment({...newAttachment, name: e.target.value})}
+                                            className="px-3 py-2 border border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none"
+                                            placeholder="Link name (e.g., 'Nurse Policy 2024')"
+                                        />
+                                        <input
+                                            type="url"
+                                            value={newAttachment.url}
+                                            onChange={(e) => setNewAttachment({...newAttachment, url: e.target.value})}
+                                            className="px-3 py-2 border border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none"
+                                            placeholder="URL (e.g., https://drive.google.com/...)"
+                                        />
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={addAttachment}
+                                        className="w-full px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition flex items-center justify-center gap-2"
+                                    >
+                                        <Icons.Plus className="w-4 h-4" />
+                                        Add Link
+                                    </button>
+                                </div>
+                                
+                                {/* Display added links */}
+                                {attachments.length > 0 && (
+                                    <div className="space-y-2">
+                                        {attachments.map((link, index) => (
+                                            <div key={index} className="flex items-center justify-between bg-blue-50 p-3 rounded-lg border border-blue-200">
+                                                <div className="flex items-center gap-3 flex-1 min-w-0">
+                                                    <div className="text-2xl">🔗</div>
+                                                    <div className="flex-1 min-w-0">
+                                                        <a
+                                                            href={link.url}
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            className="text-sm font-medium text-blue-600 hover:underline block truncate"
+                                                        >
+                                                            {link.name}
+                                                        </a>
+                                                        <div className="text-xs text-gray-500 truncate">
+                                                            {link.url}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <button
+                                                    onClick={() => deleteAttachment(index)}
+                                                    className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition flex-shrink-0"
+                                                    title="Remove link"
+                                                >
+                                                    <Icons.Trash className="w-4 h-4" />
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                                
+                                {attachments.length === 0 && (
+                                    <div className="text-center py-4 text-gray-400 text-sm">
+                                        No links added yet. Add links to policies, SOPs, or reference documents.
+                                    </div>
+                                )}
+                            </div>
+                            
+                            <div className="grid md:grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-sm font-semibold text-gray-700 mb-2">Specialty</label>
+                                    <select
+                                        value={formData.specialty}
+                                        onChange={(e) => setFormData({ ...formData, specialty: e.target.value })}
+                                        className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:border-blue-500 focus:outline-none"
+                                    >
+                                        <option value="nurse">Nurse</option>
+                                        <option value="moa">Medical Office Assistant</option>
+                                        <option value="dietician">Dietician</option>
+                                        <option value="physician">Physician</option>
+                                        <option value="pharmacist">Pharmacist</option>
+                                        <option value="lab_tech">Lab Technician</option>
+                                    </select>
+                                </div>
+                                
+                                <div>
+                                    <label className="block text-sm font-semibold text-gray-700 mb-2">Status</label>
+                                    <select
+                                        value={formData.status}
+                                        onChange={(e) => setFormData({ ...formData, status: e.target.value })}
+                                        className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:border-blue-500 focus:outline-none"
+                                    >
+                                        <option value="draft">Draft</option>
+                                        <option value="published">Published</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    {/* Steps Section */}
+                    <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
+                        <div className="flex justify-between items-center mb-4">
+                            <h2 className="text-xl font-bold text-gray-800">Steps ({steps.length})</h2>
+                            <button
+                                onClick={createNewStep}
+                                className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition"
+                            >
+                                <Icons.Plus className="w-4 h-4" />
+                                Add Step
+                            </button>
+                        </div>
+                        
+                        <div ref={stepsListRef} className="space-y-3">
+                            {steps.map((step, index) => (
+                                <div
+                                    key={step.id}
+                                    className="flex items-center gap-3 p-4 bg-gray-50 rounded-lg border-2 border-gray-200 hover:border-blue-300 transition cursor-move"
+                                >
+                                    <div className="drag-handle cursor-grab active:cursor-grabbing">
+                                        <Icons.GripVertical className="w-6 h-6 text-gray-400" />
+                                    </div>
+                                    
+                                    <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gradient-to-br from-blue-400 to-indigo-500 flex items-center justify-center text-white font-bold text-sm">
+                                        {index + 1}
+                                    </div>
+                                    
+                                    <div className="flex-1">
+                                        <div className="font-bold text-gray-800">{step.icon} {step.title}</div>
+                                        <div className="text-sm text-gray-600">{step.phase}</div>
+                                    </div>
+                                    
+                                    <div className="flex gap-2">
+                                        <button
+                                            onClick={() => setEditingStep(step)}
+                                            className="p-2 text-blue-600 hover:bg-blue-100 rounded-lg"
+                                        >
+                                            <Icons.Edit className="w-4 h-4" />
+                                        </button>
+                                        <button
+                                            onClick={() => deleteStep(step.id)}
+                                            className="p-2 text-red-600 hover:bg-red-100 rounded-lg"
+                                        >
+                                            <Icons.Trash className="w-4 h-4" />
+                                        </button>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                        
+                        {steps.length === 0 && (
+                            <div className="text-center py-8 text-gray-500">
+                                No steps added yet. Click "Add Step" to create your first step.
+                            </div>
+                        )}
+                    </div>
+                    
+                    {/* Save Buttons */}
+                    <div className="flex gap-4">
+                        <button
+                            onClick={() => saveJourney(false)}
+                            disabled={saving}
+                            className={`flex-1 py-4 rounded-xl font-bold transition ${
+                                saving 
+                                    ? 'bg-gray-400 text-gray-200 cursor-not-allowed'
+                                    : 'bg-gradient-to-r from-blue-500 to-indigo-600 text-white hover:from-blue-600 hover:to-indigo-700'
+                            }`}
+                        >
+                            {saving ? '⏳ Saving...' : '💾 Save'}
+                        </button>
+                        <button
+                            onClick={() => saveJourney(true)}
+                            disabled={saving}
+                            className={`flex-1 py-4 rounded-xl font-bold transition ${
+                                saving 
+                                    ? 'bg-gray-400 text-gray-200 cursor-not-allowed'
+                                    : 'bg-gradient-to-r from-green-500 to-emerald-600 text-white hover:from-green-600 hover:to-emerald-700'
+                            }`}
+                        >
+                            {saving ? '⏳ Saving...' : '✓ Save & Close'}
+                        </button>
+                    </div>
+                </div>
+            );
+        }
+        
+        // ============================================
+        // STEP EDITOR (with drag-drop tasks)
+        // ============================================
+        function StepEditor({ step, onSave, onClose, showToast }) {
+            const [formData, setFormData] = useState(step);
+            const [tasks, setTasks] = useState([]);
+            const [loading, setLoading] = useState(true);
+            const [saving, setSaving] = useState(false);
+            const tasksListRef = useRef(null);
+            
+            useEffect(() => {
+                loadTasks();
+            }, []);
+            
+            useEffect(() => {
+                if (tasksListRef.current && tasks.length > 0) {
+                    const sortable = Sortable.create(tasksListRef.current, {
+                        animation: 150,
+                        handle: '.drag-handle',
+                        onEnd: (evt) => {
+                            const reordered = [...tasks];
+                            const [removed] = reordered.splice(evt.oldIndex, 1);
+                            reordered.splice(evt.newIndex, 0, removed);
+                            reordered.forEach((task, index) => {
+                                task.order = index + 1;
+                            });
+                            setTasks(reordered);
+                        }
+                    });
+                    return () => sortable.destroy();
+                }
+            }, [tasks]);
+            
+            const loadTasks = async () => {
+                if (!formData.taskIds || formData.taskIds.length === 0) {
+                    setLoading(false);
+                    return;
+                }
+                
+                const { doc, getDoc } = window.firebaseModules;
+                const tasksPromises = formData.taskIds.map(taskId => getDoc(doc(db, 'tasks', taskId)));
+                const tasksDocs = await Promise.all(tasksPromises);
+                const tasksData = tasksDocs
+                    .filter(doc => doc.exists())
+                    .map(doc => ({ id: doc.id, ...doc.data() }))
+                    .sort((a, b) => a.order - b.order);
+                
+                setTasks(tasksData);
+                setLoading(false);
+            };
+            
+            const saveStep = async (closeAfter = false) => {
+    		if (saving) return; // Prevent double-save
+    		setSaving(true);
+    		
+    		const { doc, setDoc, updateDoc } = window.firebaseModules;
+    
+    		try {
+        		// Save tasks first
+        		for (const task of tasks) {
+           		 const taskData = {
+                	action: task.action,
+                	accuroNavigation: task.accuroNavigation,
+                	estimatedTime: task.estimatedTime,
+                	order: task.order
+            	};
+            
+            	if (!task.id) {
+                	// New task
+                	const newTaskId = 'task_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+                	taskData.id = newTaskId;
+                	await setDoc(doc(db, 'tasks', newTaskId), taskData);
+                	task.id = newTaskId;
+            	} else {
+                	// Update existing task
+                	await updateDoc(doc(db, 'tasks', task.id), taskData);
+            	}
+           }
+        
+        	// Save step
+        	const stepData = {
+            	title: formData.title,
+            	phase: formData.phase,
+            	icon: formData.icon,
+            	color: formData.color,
+            	outcome: formData.outcome,
+            	nextAction: formData.nextAction,
+            	order: formData.order,
+            	taskIds: tasks.map(t => t.id)
+          };
+        
+        if (!formData.id) {
+            // New step
+            const newStepId = 'step_' + Date.now();
+            stepData.id = newStepId;
+            await setDoc(doc(db, 'steps', newStepId), stepData);
+            formData.id = newStepId;
+        } else {
+            // Update existing step
+            await updateDoc(doc(db, 'steps', formData.id), stepData);
+        }
+        
+        showToast('Step saved successfully!');
+        setSaving(false); // Reset saving state
+        
+        if (closeAfter) {
+            onSave({ ...formData, ...stepData, tasks: tasks });
+        }
+        
+    	} catch (error) {
+        	console.error('Error saving step:', error);
+        	showToast('Error saving step: ' + error.message, 'error');
+        	setSaving(false);
+    	}
+	};
+            
+            const addTask = () => {
+                setTasks([...tasks, {
+                    id: null,
+                    tempId: 'temp_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9), // Temporary ID for drag-drop
+                    action: '',
+                    accuroNavigation: '',
+                    estimatedTime: '',
+                    order: tasks.length + 1
+                }]);
+            };
+            
+            const updateTask = (index, field, value) => {
+                const updated = [...tasks];
+                updated[index][field] = value;
+                setTasks(updated);
+            };
+            
+            const deleteTask = (index) => {
+                setTasks(tasks.filter((_, i) => i !== index));
+            };
+            
+            return (
+                <div className="p-8 max-w-5xl mx-auto">
+                    <div className="flex justify-between items-center mb-8">
+                        <h1 className="text-3xl font-bold text-gray-800">
+                            {formData.id ? '✏️ Edit Step' : '➕ Create Step'}
+                        </h1>
+                        <div className="flex gap-2">
+                            <button 
+                                onClick={onClose} 
+                                className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg transition"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={() => saveStep(false)}
+                                disabled={saving}
+                                className={`px-4 py-2 rounded-lg font-semibold transition ${
+                                    saving 
+                                        ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                                        : 'bg-blue-500 text-white hover:bg-blue-600'
+                                }`}
+                            >
+                                {saving ? '⏳' : '💾'} Save
+                            </button>
+                            <button
+                                onClick={() => saveStep(true)}
+                                disabled={saving}
+                                className={`px-4 py-2 rounded-lg font-semibold transition ${
+                                    saving 
+                                        ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                                        : 'bg-green-500 text-white hover:bg-green-600'
+                                }`}
+                            >
+                                {saving ? '⏳' : '✓'} Save & Close
+                            </button>
+                        </div>
+                    </div>
+                    
+                    {/* Step Details */}
+                    <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
+                        <h2 className="text-xl font-bold text-gray-800 mb-4">Step Details</h2>
+                        
+                        <div className="grid gap-4">
+                            <div>
+                                <label className="block text-sm font-semibold text-gray-700 mb-2">Title</label>
+                                <input
+                                    type="text"
+                                    value={formData.title}
+                                    onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                                    className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:border-blue-500 focus:outline-none"
+                                    placeholder="e.g., Patient Check-In Process"
+                                />
+                            </div>
+                            
+                            <div className="grid md:grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-sm font-semibold text-gray-700 mb-2">Phase</label>
+                                    <input
+                                        type="text"
+                                        value={formData.phase}
+                                        onChange={(e) => setFormData({ ...formData, phase: e.target.value })}
+                                        className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:border-blue-500 focus:outline-none"
+                                        placeholder="e.g., Patient Arrival"
+                                    />
+                                </div>
+                                
+                                <div>
+                                    <label className="block text-sm font-semibold text-gray-700 mb-2">Icon (Emoji)</label>
+                                    <input
+                                        type="text"
+                                        value={formData.icon}
+                                        onChange={(e) => setFormData({ ...formData, icon: e.target.value })}
+                                        className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:border-blue-500 focus:outline-none"
+                                        placeholder="e.g., 🏥"
+                                        maxLength="2"
+                                    />
+                                </div>
+                            </div>
+                            
+                            <div>
+                                <label className="block text-sm font-semibold text-gray-700 mb-2">Color (Tailwind Gradient)</label>
+                                <input
+                                    type="text"
+                                    value={formData.color}
+                                    onChange={(e) => setFormData({ ...formData, color: e.target.value })}
+                                    className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:border-blue-500 focus:outline-none"
+                                    placeholder="e.g., from-blue-500 to-indigo-600"
+                                />
+                            </div>
+                            
+                            <div className="grid md:grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-sm font-semibold text-gray-700 mb-2">Expected Outcome</label>
+                                    <input
+                                        type="text"
+                                        value={formData.outcome}
+                                        onChange={(e) => setFormData({ ...formData, outcome: e.target.value })}
+                                        className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:border-blue-500 focus:outline-none"
+                                        placeholder="What's achieved"
+                                    />
+                                </div>
+                                
+                                <div>
+                                    <label className="block text-sm font-semibold text-gray-700 mb-2">Next Action</label>
+                                    <input
+                                        type="text"
+                                        value={formData.nextAction}
+                                        onChange={(e) => setFormData({ ...formData, nextAction: e.target.value })}
+                                        className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:border-blue-500 focus:outline-none"
+                                        placeholder="What comes next"
+                                    />
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    {/* Tasks Section */}
+                    <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
+                        <div className="flex justify-between items-center mb-4">
+                            <h2 className="text-xl font-bold text-gray-800">Tasks ({tasks.length})</h2>
+                            <button
+                                onClick={addTask}
+                                className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition"
+                            >
+                                <Icons.Plus className="w-4 h-4" />
+                                Add Task
+                            </button>
+                        </div>
+                        
+                        <div ref={tasksListRef} className="space-y-4">
+                            {tasks.map((task, index) => (
+                                <div key={task.id || task.tempId} className="flex gap-3 p-4 bg-gray-50 rounded-lg border-2 border-gray-200">
+                                    <div className="drag-handle cursor-grab active:cursor-grabbing pt-2">
+                                        <Icons.GripVertical className="w-5 h-5 text-gray-400" />
+                                    </div>
+                                    
+                                    <div className="flex-shrink-0 w-8 h-8 rounded-full bg-blue-500 text-white flex items-center justify-center font-bold text-sm mt-2">
+                                        {index + 1}
+                                    </div>
+                                    
+                                    <div className="flex-1 space-y-3">
+                                        <input
+                                            type="text"
+                                            value={task.action}
+                                            onChange={(e) => updateTask(index, 'action', e.target.value)}
+                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none"
+                                            placeholder="Task action (e.g., 'Verify patient identity')"
+                                        />
+                                        
+                                        <input
+                                            type="text"
+                                            value={task.accuroNavigation}
+                                            onChange={(e) => updateTask(index, 'accuroNavigation', e.target.value)}
+                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none font-mono text-sm"
+                                            placeholder="Accuro navigation (e.g., 'Patient → Demographics → Verify health card')"
+                                        />
+                                        
+                                        <input
+                                            type="text"
+                                            value={task.estimatedTime}
+                                            onChange={(e) => updateTask(index, 'estimatedTime', e.target.value)}
+                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none"
+                                            placeholder="Est. time (e.g., '2 min')"
+                                        />
+                                        
+                                        {/* Screenshot URL */}
+                                        <div className="border-2 border-gray-300 rounded-lg p-3">
+                                            <div className="flex items-center gap-2 mb-2">
+                                                <span className="text-lg">🔗</span>
+                                                <label className="text-xs font-semibold text-gray-700">Screenshot URL (optional)</label>
+                                            </div>
+                                            <input
+                                                type="url"
+                                                value={task.screenshotUrl || ''}
+                                                onChange={(e) => updateTask(index, 'screenshotUrl', e.target.value)}
+                                                className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:border-blue-500 focus:outline-none"
+                                                placeholder="https://imgur.com/... or Google Drive link"
+                                            />
+                                            {task.screenshotUrl && (
+                                                <a
+                                                    href={task.screenshotUrl}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="text-xs text-blue-600 hover:underline mt-1 inline-block"
+                                                >
+                                                    🔗 Open screenshot in new tab
+                                                </a>
+                                            )}
+                                        </div>
+                                    </div>
+                                    
+                                    <button
+                                        onClick={() => deleteTask(index)}
+                                        className="p-2 text-red-600 hover:bg-red-100 rounded-lg h-fit mt-2"
+                                    >
+                                        <Icons.Trash className="w-4 h-4" />
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
+                        
+                        {tasks.length === 0 && (
+                            <div className="text-center py-8 text-gray-500">
+                                No tasks added yet. Click "Add Task" to create tasks for this step.
+                            </div>
+                        )}
+                    </div>
+                    
+                    {/* Save Buttons */}
+                    <div className="flex gap-4">
+                        <button
+                            onClick={onClose}
+                            className="px-6 py-4 bg-gray-200 text-gray-700 rounded-xl font-bold hover:bg-gray-300 transition"
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            onClick={() => saveStep(false)}
+                            disabled={saving}
+                            className={`flex-1 py-4 rounded-xl font-bold transition ${
+                                saving 
+                                    ? 'bg-gray-400 text-gray-200 cursor-not-allowed'
+                                    : 'bg-gradient-to-r from-blue-500 to-indigo-600 text-white hover:from-blue-600 hover:to-indigo-700'
+                            }`}
+                        >
+                            {saving ? '⏳ Saving...' : '💾 Save'}
+                        </button>
+                        <button
+                            onClick={() => saveStep(true)}
+                            disabled={saving}
+                            className={`flex-1 py-4 rounded-xl font-bold transition ${
+                                saving 
+                                    ? 'bg-gray-400 text-gray-200 cursor-not-allowed'
+                                    : 'bg-gradient-to-r from-green-500 to-emerald-600 text-white hover:from-green-600 hover:to-emerald-700'
+                            }`}
+                        >
+                            {saving ? '⏳ Saving...' : '✓ Save & Close'}
+                        </button>
+                    </div>
+                </div>
+            );
+        }
+        
+        // ============================================
+        // USER MANAGEMENT
+        // ============================================
+        function UserManagement({ showToast }) {
+            const [users, setUsers] = useState([]);
+            const [specialties, setSpecialties] = useState([]);
+            const [loading, setLoading] = useState(true);
+            const [editingUser, setEditingUser] = useState(null);
+            const [showEditModal, setShowEditModal] = useState(false);
+            
+            useEffect(() => {
+                loadUsers(); // This will also load specialties
+            }, []);
+            
+            const loadSpecialties = async () => {
+                const { doc, getDoc } = window.firebaseModules;
+                try {
+                    const specialtiesDoc = await getDoc(doc(db, 'settings', 'specialties'));
+                    if (specialtiesDoc.exists()) {
+                        setSpecialties(specialtiesDoc.data().list || []);
+                    } else {
+                        // Default specialties
+                        setSpecialties([
+                            { id: 'nurse', name: 'Nurse' },
+                            { id: 'moa', name: 'Medical Office Assistant' },
+                            { id: 'dietician', name: 'Dietician' },
+                            { id: 'physician', name: 'Physician' },
+                            { id: 'pharmacist', name: 'Pharmacist' },
+                            { id: 'lab_tech', name: 'Lab Technician' }
+                        ]);
+                    }
+                } catch (error) {
+                    console.error('Error loading specialties:', error);
+                }
+            };
+            
+            const loadUsers = async () => {
+                const { collection, getDocs } = window.firebaseModules;
+                const querySnapshot = await getDocs(collection(db, 'users'));
+                const userData = querySnapshot.docs.map(doc => ({
+                    id: doc.id,
+                    ...doc.data()
+                }));
+                setUsers(userData);
+                
+                // Also reload specialties to ensure names are up-to-date
+                await loadSpecialties();
+                
+                setLoading(false);
+            };
+            
+            // Helper to get specialty display name from ID
+            const getSpecialtyName = (specialtyId) => {
+                const specialty = specialties.find(s => s.id === specialtyId);
+                return specialty ? specialty.name : specialtyId;
+            };
+            
+            const handleEditUser = (user) => {
+                setEditingUser({...user});
+                setShowEditModal(true);
+            };
+            
+            const handleSaveUser = async () => {
+                if (!editingUser) return;
+                
+                const { doc, updateDoc } = window.firebaseModules;
+                
+                try {
+                    await updateDoc(doc(db, 'users', editingUser.id), {
+                        displayName: editingUser.displayName,
+                        specialty: editingUser.specialty,
+                        role: editingUser.role
+                    });
+                    
+                    showToast('User updated successfully!');
+                    setShowEditModal(false);
+                    setEditingUser(null);
+                    loadUsers();
+                } catch (error) {
+                    console.error('Error updating user:', error);
+                    showToast('Error updating user: ' + error.message, 'error');
+                }
+            };
+            
+            const handleDeleteUser = async (userId, userName) => {
+                if (!confirm(`Are you sure you want to delete ${userName}?\n\nWARNING: This will delete their account and all progress data. This action cannot be undone.`)) return;
+                
+                const { doc, deleteDoc, collection, query, where, getDocs } = window.firebaseModules;
+                
+                try {
+                    // Delete user progress
+                    const progressQuery = query(collection(db, 'userProgress'), where('userId', '==', userId));
+                    const progressSnapshot = await getDocs(progressQuery);
+                    for (const progressDoc of progressSnapshot.docs) {
+                        await deleteDoc(progressDoc.ref);
+                    }
+                    
+                    // Delete user document
+                    await deleteDoc(doc(db, 'users', userId));
+                    
+                    showToast('User deleted successfully');
+                    loadUsers();
+                } catch (error) {
+                    console.error('Error deleting user:', error);
+                    showToast('Error deleting user: ' + error.message, 'error');
+                }
+            };
+            
+            if (loading) return <div className="p-8">Loading users...</div>;
+            
+            return (
+                <div className="p-8">
+                    <h1 className="text-3xl font-bold text-gray-800 mb-8">👥 User Management</h1>
+                    
+                    <div className="bg-white rounded-xl shadow-lg overflow-hidden">
+                        <table className="w-full">
+                            <thead className="bg-gray-50">
+                                <tr>
+                                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Name</th>
+                                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Email</th>
+                                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Specialty</th>
+                                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Role</th>
+                                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Joined</th>
+                                    <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-200">
+                                {users.map(user => (
+                                    <tr key={user.id} className="hover:bg-gray-50">
+                                        <td className="px-6 py-4 text-sm font-medium text-gray-800">{user.displayName}</td>
+                                        <td className="px-6 py-4 text-sm text-gray-600">{user.email}</td>
+                                        <td className="px-6 py-4">
+                                            <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-semibold">
+                                                {getSpecialtyName(user.specialty)}
+                                            </span>
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                                                user.role === 'trainer' 
+                                                    ? 'bg-purple-100 text-purple-700' 
+                                                    : 'bg-green-100 text-green-700'
+                                            }`}>
+                                                {user.role}
+                                            </span>
+                                        </td>
+                                        <td className="px-6 py-4 text-sm text-gray-600">
+                                            {user.createdAt?.toDate ? user.createdAt.toDate().toLocaleDateString() : 'N/A'}
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            <div className="flex gap-2">
+                                                <button
+                                                    onClick={() => handleEditUser(user)}
+                                                    className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition"
+                                                    title="Edit user"
+                                                >
+                                                    <Icons.Edit className="w-4 h-4" />
+                                                </button>
+                                                <button
+                                                    onClick={() => handleDeleteUser(user.id, user.displayName)}
+                                                    className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition"
+                                                    title="Delete user"
+                                                >
+                                                    <Icons.Trash className="w-4 h-4" />
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                    
+                    {users.length === 0 && (
+                        <div className="text-center py-12 bg-white rounded-xl">
+                            <div className="text-6xl mb-4">👥</div>
+                            <h3 className="text-xl font-bold text-gray-800 mb-2">No Users Yet</h3>
+                            <p className="text-gray-600">Users will appear here once they sign up.</p>
+                        </div>
+                    )}
+                    
+                    {/* Edit User Modal */}
+                    {showEditModal && editingUser && (
+                        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                            <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-8">
+                                <h2 className="text-2xl font-bold text-gray-800 mb-6">Edit User</h2>
+                                
+                                <div className="space-y-4">
+                                    <div>
+                                        <label className="block text-sm font-semibold text-gray-700 mb-2">
+                                            Display Name
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={editingUser.displayName}
+                                            onChange={(e) => setEditingUser({...editingUser, displayName: e.target.value})}
+                                            className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:border-blue-500 focus:outline-none"
+                                        />
+                                    </div>
+                                    
+                                    <div>
+                                        <label className="block text-sm font-semibold text-gray-700 mb-2">
+                                            Email (Read Only)
+                                        </label>
+                                        <input
+                                            type="email"
+                                            value={editingUser.email}
+                                            disabled
+                                            className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg bg-gray-100 text-gray-600"
+                                        />
+                                        <p className="text-xs text-gray-500 mt-1">Email cannot be changed. Use password reset to help user regain access.</p>
+                                    </div>
+                                    
+                                    <div>
+                                        <label className="block text-sm font-semibold text-gray-700 mb-2">
+                                            Specialty
+                                        </label>
+                                        <select
+                                            value={editingUser.specialty}
+                                            onChange={(e) => setEditingUser({...editingUser, specialty: e.target.value})}
+                                            className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:border-blue-500 focus:outline-none"
+                                        >
+                                            {specialties.map(spec => (
+                                                <option key={spec.id} value={spec.id}>{spec.name}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                    
+                                    <div>
+                                        <label className="block text-sm font-semibold text-gray-700 mb-2">
+                                            Role
+                                        </label>
+                                        <select
+                                            value={editingUser.role}
+                                            onChange={(e) => setEditingUser({...editingUser, role: e.target.value})}
+                                            className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:border-blue-500 focus:outline-none"
+                                        >
+                                            <option value="student">Student</option>
+                                            <option value="trainer">Trainer</option>
+                                        </select>
+                                        <p className="text-xs text-orange-600 mt-1">⚠️ Trainers can manage all content and users</p>
+                                    </div>
+                                </div>
+                                
+                                <div className="flex gap-3 mt-8">
+                                    <button
+                                        onClick={() => {
+                                            setShowEditModal(false);
+                                            setEditingUser(null);
+                                        }}
+                                        className="flex-1 px-6 py-3 bg-gray-200 text-gray-700 rounded-lg font-semibold hover:bg-gray-300 transition"
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        onClick={handleSaveUser}
+                                        className="flex-1 px-6 py-3 bg-gradient-to-r from-blue-500 to-indigo-600 text-white rounded-lg font-semibold hover:from-blue-600 hover:to-indigo-700 transition"
+                                    >
+                                        Save Changes
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        }
+        
+        // ============================================
+        // ANALYTICS
+        // ============================================
+        
+        // ============================================
+        // SPECIALTY MANAGEMENT
+        // ============================================
+        function SpecialtyManagement({ showToast }) {
+            const [specialties, setSpecialties] = useState([]);
+            const [loading, setLoading] = useState(true);
+            const [newSpecialty, setNewSpecialty] = useState('');
+            const [editingSpecialty, setEditingSpecialty] = useState(null);
+            
+            useEffect(() => {
+                loadSpecialties();
+            }, []);
+            
+            const loadSpecialties = async () => {
+                const { doc, getDoc } = window.firebaseModules;
+                
+                try {
+                    const specialtiesDoc = await getDoc(doc(db, 'settings', 'specialties'));
+                    
+                    if (specialtiesDoc.exists()) {
+                        setSpecialties(specialtiesDoc.data().list || []);
+                    } else {
+                        // Initialize with default specialties
+                        const defaultSpecialties = [
+                            { id: 'nurse', name: 'Nurse' },
+                            { id: 'moa', name: 'Medical Office Assistant' },
+                            { id: 'dietician', name: 'Dietician' },
+                            { id: 'physician', name: 'Physician' },
+                            { id: 'pharmacist', name: 'Pharmacist' },
+                            { id: 'lab_tech', name: 'Lab Technician' }
+                        ];
+                        setSpecialties(defaultSpecialties);
+                        
+                        // Save defaults to Firestore
+                        const { setDoc } = window.firebaseModules;
+                        await setDoc(doc(db, 'settings', 'specialties'), { list: defaultSpecialties });
+                    }
+                } catch (error) {
+                    console.error('Error loading specialties:', error);
+                    showToast('Error loading specialties', 'error');
+                }
+                
+                setLoading(false);
+            };
+            
+            const addSpecialty = async () => {
+                if (!newSpecialty.trim()) {
+                    showToast('Please enter a specialty name', 'error');
+                    return;
+                }
+                
+                const id = newSpecialty.toLowerCase().replace(/\s+/g, '_');
+                
+                // Check if already exists
+                if (specialties.some(s => s.id === id)) {
+                    showToast('This specialty already exists', 'error');
+                    return;
+                }
+                
+                const { doc, setDoc } = window.firebaseModules;
+                const newSpec = { id, name: newSpecialty.trim() };
+                const updated = [...specialties, newSpec];
+                
+                try {
+                    await setDoc(doc(db, 'settings', 'specialties'), { list: updated });
+                    setSpecialties(updated);
+                    setNewSpecialty('');
+                    showToast('Specialty added successfully!');
+                } catch (error) {
+                    console.error('Error adding specialty:', error);
+                    showToast('Error adding specialty', 'error');
+                }
+            };
+            
+            const updateSpecialty = async (oldId, newName, originalName) => {
+                // If name hasn't changed, just close editor (no toast)
+                if (newName.trim() === originalName.trim()) {
+                    setEditingSpecialty(null);
+                    return;
+                }
+                
+                if (!newName.trim()) {
+                    showToast('Specialty name cannot be empty', 'error');
+                    setEditingSpecialty(null);
+                    return;
+                }
+                
+                const { doc, setDoc } = window.firebaseModules;
+                const updated = specialties.map(s => 
+                    s.id === oldId ? { ...s, name: newName.trim() } : s
+                );
+                
+                try {
+                    await setDoc(doc(db, 'settings', 'specialties'), { list: updated });
+                    setSpecialties(updated);
+                    setEditingSpecialty(null);
+                    showToast('Specialty updated successfully!');
+                } catch (error) {
+                    console.error('Error updating specialty:', error);
+                    showToast('Error updating specialty', 'error');
+                }
+            };
+            
+            const deleteSpecialty = async (id) => {
+                if (!confirm('Delete this specialty? Users with this specialty will need to be reassigned.')) return;
+                
+                const { doc, setDoc } = window.firebaseModules;
+                const updated = specialties.filter(s => s.id !== id);
+                
+                try {
+                    await setDoc(doc(db, 'settings', 'specialties'), { list: updated });
+                    setSpecialties(updated);
+                    showToast('Specialty deleted successfully');
+                } catch (error) {
+                    console.error('Error deleting specialty:', error);
+                    showToast('Error deleting specialty', 'error');
+                }
+            };
+            
+            if (loading) {
+                return (
+                    <div className="p-8 max-w-4xl mx-auto">
+                        <div className="text-center text-gray-500">Loading specialties...</div>
+                    </div>
+                );
+            }
+            
+            return (
+                <div className="p-8 max-w-4xl mx-auto">
+                    <div className="mb-8">
+                        <h1 className="text-3xl font-bold text-gray-800 mb-2">Specialty Management</h1>
+                        <p className="text-gray-600">Manage available specialties for users</p>
+                    </div>
+                    
+                    {/* Add New Specialty */}
+                    <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
+                        <h2 className="text-xl font-bold text-gray-800 mb-4">Add New Specialty</h2>
+                        <div className="flex gap-3">
+                            <input
+                                type="text"
+                                value={newSpecialty}
+                                onChange={(e) => setNewSpecialty(e.target.value)}
+                                onKeyPress={(e) => e.key === 'Enter' && addSpecialty()}
+                                placeholder="e.g., Radiologist, Chiropractor"
+                                className="flex-1 px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-blue-500 focus:outline-none"
+                            />
+                            <button
+                                onClick={addSpecialty}
+                                className="px-6 py-3 bg-gradient-to-r from-blue-500 to-indigo-600 text-white font-bold rounded-lg hover:from-blue-600 hover:to-indigo-700 transition"
+                            >
+                                + Add Specialty
+                            </button>
+                        </div>
+                    </div>
+                    
+                    {/* Specialties List */}
+                    <div className="bg-white rounded-xl shadow-lg p-6">
+                        <h2 className="text-xl font-bold text-gray-800 mb-4">Current Specialties ({specialties.length})</h2>
+                        
+                        {specialties.length === 0 ? (
+                            <p className="text-gray-500 text-center py-8">No specialties yet. Add one above!</p>
+                        ) : (
+                            <div className="space-y-3">
+                                {specialties.map((specialty) => (
+                                    <div key={specialty.id} className="flex items-center gap-3 p-4 bg-gray-50 rounded-lg border-2 border-gray-200">
+                                        {editingSpecialty === specialty.id ? (
+                                            <>
+                                                <input
+                                                    type="text"
+                                                    defaultValue={specialty.name}
+                                                    onKeyPress={(e) => {
+                                                        if (e.key === 'Enter') {
+                                                            updateSpecialty(specialty.id, e.target.value, specialty.name);
+                                                        }
+                                                    }}
+                                                    className="flex-1 px-3 py-2 border-2 border-blue-500 rounded-lg focus:outline-none"
+                                                    autoFocus
+                                                    onBlur={(e) => updateSpecialty(specialty.id, e.target.value, specialty.name)}
+                                                />
+                                                <button
+                                                    onClick={() => setEditingSpecialty(null)}
+                                                    className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition"
+                                                >
+                                                    Cancel
+                                                </button>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <div className="flex-1">
+                                                    <div className="font-semibold text-gray-800">{specialty.name}</div>
+                                                    <div className="text-xs text-gray-500">ID: {specialty.id}</div>
+                                                </div>
+                                                <button
+                                                    onClick={() => setEditingSpecialty(specialty.id)}
+                                                    className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition"
+                                                    title="Edit"
+                                                >
+                                                    <Icons.Edit className="w-5 h-5" />
+                                                </button>
+                                                <button
+                                                    onClick={() => deleteSpecialty(specialty.id)}
+                                                    className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition"
+                                                    title="Delete"
+                                                >
+                                                    <Icons.Trash className="w-5 h-5" />
+                                                </button>
+                                            </>
+                                        )}
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                    
+                    <div className="mt-6 p-4 bg-blue-50 border-2 border-blue-200 rounded-lg">
+                        <p className="text-sm text-blue-800">
+                            <strong>💡 Tip:</strong> Changes to specialties will be reflected immediately in user management. 
+                            Existing users keep their specialty even if you delete it from this list.
+                        </p>
+                    </div>
+                </div>
+            );
+        }
+        
+        // ============================================
+        // ANALYTICS
+        // ============================================
+        function Analytics() {
+            const [analytics, setAnalytics] = useState(null);
+            const [loading, setLoading] = useState(true);
+            
+            useEffect(() => {
+                loadAnalytics();
+            }, []);
+            
+            const loadAnalytics = async () => {
+                const { collection, getDocs } = window.firebaseModules;
+                
+                // Load all progress records
+                const progressSnapshot = await getDocs(collection(db, 'userProgress'));
+                const allProgress = progressSnapshot.docs.map(doc => doc.data());
+                
+                // Calculate metrics
+                const totalUsers = new Set(allProgress.map(p => p.userId)).size;
+                const completedJourneys = allProgress.filter(p => p.status === 'completed').length;
+                const avgCompletion = allProgress.length > 0 
+                    ? Math.round((allProgress.reduce((sum, p) => sum + (p.completedStepIds?.length || 0), 0) / allProgress.length) * 100) / 100
+                    : 0;
+                
+                setAnalytics({
+                    totalUsers,
+                    completedJourneys,
+                    avgCompletion,
+                    inProgressJourneys: allProgress.filter(p => p.status === 'in_progress').length
+                });
+                setLoading(false);
+            };
+            
+            if (loading) return <div className="p-8">Loading analytics...</div>;
+            
+            return (
+                <div className="p-8">
+                    <h1 className="text-3xl font-bold text-gray-800 mb-8">📈 Analytics Dashboard</h1>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                        <div className="bg-white rounded-xl shadow-lg p-6 border-l-4 border-blue-500">
+                            <div className="text-sm text-gray-600 mb-1">Active Learners</div>
+                            <div className="text-3xl font-bold text-gray-800">{analytics.totalUsers}</div>
+                            <div className="text-xs text-gray-500 mt-2">Total users in system</div>
+                        </div>
+                        
+                        <div className="bg-white rounded-xl shadow-lg p-6 border-l-4 border-green-500">
+                            <div className="text-sm text-gray-600 mb-1">Completed Journeys</div>
+                            <div className="text-3xl font-bold text-gray-800">{analytics.completedJourneys}</div>
+                            <div className="text-xs text-green-600 mt-2">✓ Fully completed</div>
+                        </div>
+                        
+                        <div className="bg-white rounded-xl shadow-lg p-6 border-l-4 border-yellow-500">
+                            <div className="text-sm text-gray-600 mb-1">In Progress</div>
+                            <div className="text-3xl font-bold text-gray-800">{analytics.inProgressJourneys}</div>
+                            <div className="text-xs text-yellow-600 mt-2">Currently learning</div>
+                        </div>
+                        
+                        <div className="bg-white rounded-xl shadow-lg p-6 border-l-4 border-purple-500">
+                            <div className="text-sm text-gray-600 mb-1">Avg. Steps Completed</div>
+                            <div className="text-3xl font-bold text-gray-800">{analytics.avgCompletion.toFixed(1)}</div>
+                            <div className="text-xs text-gray-500 mt-2">Per user journey</div>
+                        </div>
+                    </div>
+                    
+                    <div className="bg-white rounded-xl shadow-lg p-6">
+                        <h2 className="text-xl font-bold text-gray-800 mb-4">📊 More detailed analytics coming soon...</h2>
+                        <p className="text-gray-600">Future features:</p>
+                        <ul className="list-disc list-inside text-gray-600 mt-2 space-y-1">
+                            <li>Completion rates by specialty</li>
+                            <li>Average time per journey</li>
+                            <li>Most/least difficult steps</li>
+                            <li>User engagement trends</li>
+                            <li>Export reports to CSV/PDF</li>
+                        </ul>
+                    </div>
+                </div>
+            );
+        }
+        
+        // ============================================
+        // ADMIN LOGIN COMPONENT
+        // ============================================
+        function AdminLogin() {
+            // Load saved email from localStorage
+            const [email, setEmail] = useState(localStorage.getItem('accuro_admin_email') || '');
+            const [password, setPassword] = useState('');
+            const [error, setError] = useState('');
+            const [loading, setLoading] = useState(false);
+
+            const handleLogin = async (e) => {
+                e.preventDefault();
+                setError('');
+                setLoading(true);
+                
+                const { signInWithEmailAndPassword } = window.firebaseModules;
+                
+                try {
+                    await signInWithEmailAndPassword(auth, email, password);
+                    // Save email to localStorage for next time
+                    localStorage.setItem('accuro_admin_email', email);
+                    // Auth state listener will handle the rest
+                } catch (err) {
+                    setError(err.message);
+                    setLoading(false);
+                }
+            };
+
+            return (
+                <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-purple-600 via-indigo-600 to-blue-600 p-4">
+                    <div className="bg-white p-8 rounded-2xl shadow-2xl w-full max-w-md">
+                        <div className="text-center mb-8">
+                            <div className="text-5xl mb-3">👨‍🏫</div>
+                            <h1 className="text-3xl font-black text-gray-800 mb-2">
+                                Accuro Training
+                            </h1>
+                            <p className="text-gray-600">
+                                Admin Portal
+                            </p>
+                        </div>
+                        
+                        <form onSubmit={handleLogin} className="space-y-4">
+                            <div>
+                                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                                    Email Address
+                                </label>
+                                <input
+                                    type="email"
+                                    value={email}
+                                    onChange={(e) => setEmail(e.target.value)}
+                                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent transition"
+                                    placeholder="trainer@example.com"
+                                    required
+                                />
+                            </div>
+                            
+                            <div>
+                                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                                    Password
+                                </label>
+                                <input
+                                    type="password"
+                                    value={password}
+                                    onChange={(e) => setPassword(e.target.value)}
+                                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent transition"
+                                    placeholder="••••••••"
+                                    required
+                                    minLength="6"
+                                />
+                            </div>
+                            
+                            {error && (
+                                <div className="bg-red-50 border-2 border-red-200 text-red-700 p-3 rounded-xl text-sm">
+                                    {error}
+                                </div>
+                            )}
+                            
+                            <button
+                                type="submit"
+                                disabled={loading}
+                                className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 text-white py-3 rounded-xl font-bold hover:from-purple-700 hover:to-indigo-700 transition shadow-lg disabled:opacity-50"
+                            >
+                                {loading ? 'Signing in...' : 'Sign In as Trainer'}
+                            </button>
+
+			<div className="mt-4 text-center">
+    			<button
+        			type="button"
+        			onClick={async () => {
+            			if (!email) {
+                			setError('Please enter your email address first');
+                		return;
+            			}
+            			try {
+                			const { sendPasswordResetEmail } = window.firebaseModules;
+                			await sendPasswordResetEmail(auth, email);
+                			alert(`Password reset email sent to ${email}. Check your inbox (and spam folder)!`);
+            			} catch (err) {
+                			console.error('Password reset error:', err);
+                			console.error('Error code:', err.code);
+                			console.error('Error message:', err.message);
+                			
+                			// Show user-friendly error
+                			if (err.code === 'auth/user-not-found') {
+                			    alert('No account found with this email address.');
+                			} else if (err.code === 'auth/invalid-email') {
+                			    alert('Invalid email address format.');
+                			} else if (err.code === 'auth/too-many-requests') {
+                			    alert('Too many reset attempts. Please try again later.');
+                			} else {
+                			    alert(`Error sending reset email: ${err.message}`);
+                			}
+                			setError(err.message);
+            			}
+        			}}
+        			className="text-sm text-purple-600 hover:underline"
+    			>
+        		Forgot password?
+    			</button>
+			</div>
+
+                        </form>
+
+                    
+                    <div className="mt-4 text-center">
+                        <button
+                            type="button"
+                            onClick={async () => {
+                                if (!email) {
+                                    setError('Please enter your email address first');
+                                    return;
+                                }
+                                try {
+                                    const { sendPasswordResetEmail } = window.firebaseModules;
+                                    await sendPasswordResetEmail(auth, email);
+                                    alert(`Password reset email sent to ${email}. Check your inbox!`);
+                                } catch (err) {
+                                    setError(err.message);
+                                }
+                            }}
+                            className="text-sm text-purple-600 hover:underline"
+                        >
+                            Forgot password?
+                        </button>
+                    </div>
+
+                        
+                        <div className="mt-6 pt-6 border-t border-gray-200 text-center">
+                            <p className="text-sm text-gray-600 mb-2">Are you a student?</p>
+                            <a href="index.html" className="text-purple-600 hover:underline font-semibold text-sm">
+                                Go to Student Portal →
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+        
+        // ============================================
+        // MAIN ADMIN APP
+        // ============================================
+        function AdminPanel() {
+            const [user, setUser] = useState(null);
+            const [userProfile, setUserProfile] = useState(null);
+            const [loading, setLoading] = useState(true);
+            const [currentView, setCurrentView] = useState('dashboard');
+            const [stats, setStats] = useState({});
+            const [toast, setToast] = useState(null);
+            const toastTimeoutRef = useRef(null);
+            
+            // Toast notification helper - replaces existing toast
+            const showToast = (message, type = 'success') => {
+                // Clear any existing timeout
+                if (toastTimeoutRef.current) {
+                    clearTimeout(toastTimeoutRef.current);
+                }
+                
+                // Show new toast
+                setToast({ message, type });
+                
+                // Auto-hide after 3 seconds
+                toastTimeoutRef.current = setTimeout(() => {
+                    setToast(null);
+                }, 3000);
+            };
+            
+            useEffect(() => {
+                const { onAuthStateChanged } = window.firebaseModules;
+                
+                const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+                    if (firebaseUser) {
+                        setUser(firebaseUser);
+                        
+                        const { doc, getDoc } = window.firebaseModules;
+                        const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
+                        
+                        if (userDoc.exists()) {
+                            const profile = userDoc.data();
+                            setUserProfile(profile);
+                            
+                            if (profile.role !== 'trainer') {
+                                alert('Access denied. This panel is for trainers only.');
+                                const { signOut } = window.firebaseModules;
+                                await signOut(auth);
+                            } else {
+                                loadStats();
+                            }
+                        }
+                    } else {
+                        setUser(null);
+                        setUserProfile(null);
+                    }
+                    setLoading(false);
+                });
+                
+                return () => unsubscribe();
+            }, []);
+            
+            const loadStats = async () => {
+                const { collection, getDocs, query, where } = window.firebaseModules;
+                
+                const usersSnapshot = await getDocs(collection(db, 'users'));
+                const journeysSnapshot = await getDocs(query(collection(db, 'journeys'), where('status', '==', 'published')));
+                const progressSnapshot = await getDocs(collection(db, 'userProgress'));
+                
+                // Count only steps that belong to published journeys
+                let totalSteps = 0;
+                journeysSnapshot.docs.forEach(doc => {
+                    const journey = doc.data();
+                    totalSteps += (journey.stepIds?.length || 0);
+                });
+                
+                const totalCompleted = progressSnapshot.docs.reduce((sum, doc) => {
+                    const data = doc.data();
+                    return sum + (data.completedStepIds?.length || 0);
+                }, 0);
+                
+                const avgCompletion = progressSnapshot.docs.length > 0 
+                    ? Math.round((totalCompleted / progressSnapshot.docs.length) * 100) / 10
+                    : 0;
+                
+                setStats({
+                    totalUsers: usersSnapshot.size,
+                    publishedJourneys: journeysSnapshot.size,
+                    totalSteps: totalSteps,
+                    avgCompletion
+                });
+            };
+            
+            const handleSignOut = async () => {
+                const { signOut } = window.firebaseModules;
+                await signOut(auth);
+            };
+            
+            if (loading) {
+                return (
+                    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-indigo-500 to-purple-600">
+                        <div className="text-white text-2xl font-bold">Loading admin panel...</div>
+                    </div>
+                );
+            }
+            
+            // Show login if not authenticated
+            if (!user) {
+                return <AdminLogin />;
+            }
+            
+            // Show loading while profile is being fetched (prevents flash of "Access Denied")
+            if (!userProfile) {
+                return (
+                    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-indigo-500 to-purple-600">
+                        <div className="text-white text-2xl font-bold">Checking permissions...</div>
+                    </div>
+                );
+            }
+            
+            // Show access denied if not a trainer
+            if (userProfile.role !== 'trainer') {
+                return (
+                    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-red-500 to-pink-600">
+                        <div className="bg-white p-8 rounded-2xl text-center">
+                            <h2 className="text-2xl font-bold text-red-600 mb-4">Access Denied</h2>
+                            <p className="text-gray-600 mb-4">This panel is for trainers only.</p>
+                            <button
+                                onClick={handleSignOut}
+                                className="px-6 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 font-semibold rounded-lg transition"
+                            >
+                                Sign Out
+                            </button>
+                        </div>
+                    </div>
+                );
+            }
+            
+            return (
+                <div className="min-h-screen bg-gray-100">
+                    {/* Sidebar */}
+                    <div className="fixed left-0 top-0 bottom-0 w-64 bg-gradient-to-b from-indigo-600 to-purple-700 text-white p-6">
+                        <div className="mb-8">
+                            <h1 className="text-2xl font-black mb-2">🏥 Accuro Admin</h1>
+                            <p className="text-sm text-indigo-200">{userProfile.displayName}</p>
+                        </div>
+                        
+                        <nav className="space-y-2">
+                            <button
+                                onClick={() => setCurrentView('dashboard')}
+                                className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition ${
+                                    currentView === 'dashboard' ? 'bg-white bg-opacity-20' : 'hover:bg-white hover:bg-opacity-10'
+                                }`}
+                            >
+                                <Icons.Home className="w-5 h-5" />
+                                Dashboard
+                            </button>
+                            
+                            <button
+                                onClick={() => setCurrentView('journeys')}
+                                className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition ${
+                                    currentView === 'journeys' ? 'bg-white bg-opacity-20' : 'hover:bg-white hover:bg-opacity-10'
+                                }`}
+                            >
+                                <Icons.Journey className="w-5 h-5" />
+                                Journeys
+                            </button>
+                            
+                            <button
+                                onClick={() => setCurrentView('users')}
+                                className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition ${
+                                    currentView === 'users' ? 'bg-white bg-opacity-20' : 'hover:bg-white hover:bg-opacity-10'
+                                }`}
+                            >
+                                <Icons.Users className="w-5 h-5" />
+                                Users
+                            </button>
+                            
+                            <button
+                                onClick={() => setCurrentView('analytics')}
+                                className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition ${
+                                    currentView === 'analytics' ? 'bg-white bg-opacity-20' : 'hover:bg-white hover:bg-opacity-10'
+                                }`}
+                            >
+                                <Icons.Analytics className="w-5 h-5" />
+                                Analytics
+                            </button>
+                            
+                            <button
+                                onClick={() => setCurrentView('settings')}
+                                className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition ${
+                                    currentView === 'settings' ? 'bg-white bg-opacity-20' : 'hover:bg-white hover:bg-opacity-10'
+                                }`}
+                            >
+                                <Icons.Settings className="w-5 h-5" />
+                                Settings
+                            </button>
+                        </nav>
+                        
+                        <div className="absolute bottom-6 left-6 right-6">
+                            <button
+                                onClick={handleSignOut}
+                                className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-white bg-opacity-20 hover:bg-opacity-30 rounded-lg transition"
+                            >
+                                <Icons.LogOut className="w-5 h-5" />
+                                Sign Out
+                            </button>
+                        </div>
+                    </div>
+                    
+                    {/* Toast Notification */}
+                    {toast && (
+                        <div className="fixed top-4 right-4 z-50 animate-slide-in">
+                            <div 
+                                onClick={() => setToast(null)}
+                                className={`px-6 py-4 rounded-lg shadow-xl flex items-center gap-3 cursor-pointer hover:opacity-90 transition ${
+                                    toast.type === 'success' ? 'bg-green-500' : 
+                                    toast.type === 'error' ? 'bg-red-500' : 'bg-blue-500'
+                                } text-white`}
+                            >
+                                <span className="text-2xl">
+                                    {toast.type === 'success' ? '✓' : toast.type === 'error' ? '✕' : 'ℹ'}
+                                </span>
+                                <span className="font-semibold flex-1">{toast.message}</span>
+                                <span className="text-sm opacity-70 hover:opacity-100">✕</span>
+                            </div>
+                        </div>
+                    )}
+                    
+                    {/* Main Content */}
+                    <div className="ml-64">
+                        {currentView === 'dashboard' && <Dashboard stats={stats} setCurrentView={setCurrentView} />}
+                        {currentView === 'journeys' && <JourneyManagement showToast={showToast} />}
+                        {currentView === 'users' && <UserManagement showToast={showToast} />}
+                        {currentView === 'analytics' && <Analytics />}
+                        {currentView === 'settings' && <SpecialtyManagement showToast={showToast} />}
+                    </div>
+                </div>
+            );
+        }
+        
+        // Render app
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<AdminPanel />);
+    </script>
+</body>
+</html>

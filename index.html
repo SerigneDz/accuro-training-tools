@@ -3,276 +3,893 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Accuro Patient Journey - Interactive Training</title>
+    <title>Accuro Training Platform</title>
     
-    <!-- React & ReactDOM from CDN -->
+    <!-- Firebase v9 (modular) -->
+    <script type="module">
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
+        import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut, sendPasswordResetEmail } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
+        import { getFirestore, collection, doc, getDoc, setDoc, updateDoc, query, where, getDocs, onSnapshot, arrayUnion, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+        
+        // Make Firebase available globally
+        window.firebaseModules = {
+            initializeApp,
+            getAuth,
+            createUserWithEmailAndPassword,
+            signInWithEmailAndPassword,
+            onAuthStateChanged,
+            signOut,
+            getFirestore,
+            collection,
+            doc,
+            getDoc,
+            setDoc,
+            updateDoc,
+            query,
+            where,
+            getDocs,
+            onSnapshot,
+            arrayUnion,
+            serverTimestamp,
+	    sendPasswordResetEmail
+        };
+    </script>
+    
+    <!-- React -->
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-    
-    <!-- Babel Standalone for JSX transformation -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     
     <style>
-        body {
-            margin: 0;
-            padding: 0;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-        }
-        #root {
-            min-height: 100vh;
-        }
+        body { margin: 0; padding: 0; }
+        #root { min-height: 100vh; }
     </style>
 </head>
 <body>
     <div id="root"></div>
     
     <script type="text/babel">
-        const { useState } = React;
+        const { useState, useEffect } = React;
         
-        // Lucide React icons as SVG components
+        // ============================================
+        // FIREBASE CONFIGURATION
+        // ============================================
+        // IMPORTANT: Replace with your Firebase config
+        const firebaseConfig = {
+  		apiKey: "AIzaSyDtSuwTZnlvoWSz0E-imfMpV2etikcD7XA",
+  		authDomain: "accuro-trainer.firebaseapp.com",
+  		projectId: "accuro-trainer",
+  		storageBucket: "accuro-trainer.firebasestorage.app",
+  		messagingSenderId: "774405600835",
+  		appId: "1:774405600835:web:c3c5d5334c615f113946f6",
+  		measurementId: "G-2KMSC5WEMM"
+	};
+        
+        // Initialize Firebase
+        const { initializeApp, getAuth, getFirestore } = window.firebaseModules;
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        
+        // ============================================
+        // ICONS (SVG Components)
+        // ============================================
         const ChevronRight = ({ className, ...props }) => (
-            <svg className={className} {...props} width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg className={className} {...props} width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <polyline points="9 18 15 12 9 6"></polyline>
             </svg>
         );
         
         const Check = ({ className, ...props }) => (
-            <svg className={className} {...props} width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg className={className} {...props} width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
                 <polyline points="20 6 9 17 4 12"></polyline>
             </svg>
         );
+        
+        const LogOut = ({ className, ...props }) => (
+            <svg className={className} {...props} width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                <polyline points="16 17 21 12 16 7"></polyline>
+                <line x1="21" y1="12" x2="9" y2="12"></line>
+            </svg>
+        );
+        
+        const Home = ({ className, ...props }) => (
+            <svg className={className} {...props} width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+                <polyline points="9 22 9 12 15 12 15 22"></polyline>
+            </svg>
+        );
+        
+        const BookOpen = ({ className, ...props }) => (
+            <svg className={className} {...props} width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path>
+                <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path>
+            </svg>
+        );
+        
+        const User = ({ className, ...props }) => (
+            <svg className={className} {...props} width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                <circle cx="12" cy="7" r="4"></circle>
+            </svg>
+        );
+        
+        // ============================================
+        // LOGIN/SIGNUP COMPONENT (STUDENT ONLY)
+        // ============================================
+        function LoginPage({ onLogin }) {
+            // Load saved email from localStorage
+            const [email, setEmail] = useState(localStorage.getItem('accuro_last_email') || '');
+            const [password, setPassword] = useState('');
+            const [isSignUp, setIsSignUp] = useState(false);
+            const [error, setError] = useState('');
+            const [loading, setLoading] = useState(false);
 
-        function PatientJourneyVisual() {
-            const [activeStep, setActiveStep] = useState(0);
-            const [completedSteps, setCompletedSteps] = useState([]);
-            const [showDetails, setShowDetails] = useState(null);
-
-            const journey = [
-                {
-                    id: 1,
-                    phase: "First Contact",
-                    title: "Initial Phone Call",
-                    icon: "📞",
-                    color: "from-emerald-500 to-teal-600",
-                    tasks: [
-                        { action: "Answer phone professionally", accuroStep: "N/A - Phone etiquette", time: "30 sec" },
-                        { action: "Gather basic patient info", accuroStep: "Listen and note: Name, DOB, Contact info", time: "2 min" },
-                        { action: "Determine visit type needed", accuroStep: "Identify: New patient vs Follow-up vs Urgent", time: "1 min" }
-                    ],
-                    outcome: "Patient info collected, visit type determined",
-                    nextAction: "Register in Accuro"
-                },
-                {
-                    id: 2,
-                    phase: "Registration",
-                    title: "Create Patient Record",
-                    icon: "👤",
-                    color: "from-blue-500 to-indigo-600",
-                    tasks: [
-                        { action: "Open Accuro", accuroStep: "Patient → New Patient (F6)", time: "10 sec" },
-                        { action: "Enter demographics", accuroStep: "Fill: Name, DOB, Sex, Health Card #", time: "2 min" },
-                        { action: "Add contact info", accuroStep: "Enter: Phone, Email, Address", time: "1 min" },
-                        { action: "Add emergency contact", accuroStep: "Emergency Contact section", time: "1 min" },
-                        { action: "Assign to provider", accuroStep: "Select Family Physician", time: "30 sec" },
-                        { action: "Save record", accuroStep: "Click Save", time: "5 sec" }
-                    ],
-                    outcome: "Patient registered in system with chart number",
-                    nextAction: "Book appointment"
-                },
-                {
-                    id: 3,
-                    phase: "Scheduling",
-                    title: "Book Appointment",
-                    icon: "📅",
-                    color: "from-purple-500 to-pink-600",
-                    tasks: [
-                        { action: "Open scheduler", accuroStep: "Click Scheduler (Ctrl+2)", time: "10 sec" },
-                        { action: "Find appropriate time slot", accuroStep: "Navigate to requested date/time", time: "30 sec" },
-                        { action: "Create appointment", accuroStep: "Right-click slot → New Appointment", time: "10 sec" },
-                        { action: "Search patient", accuroStep: "Type patient name, select from list", time: "20 sec" },
-                        { action: "Set appointment details", accuroStep: "Type: New Patient, Duration: 45 min", time: "30 sec" },
-                        { action: "Add appointment notes", accuroStep: "Add notes: 'Bring health history, medications'", time: "1 min" },
-                        { action: "Confirm booking", accuroStep: "Save appointment", time: "5 sec" }
-                    ],
-                    outcome: "Appointment booked and confirmed",
-                    nextAction: "Prepare for visit"
-                },
-                {
-                    id: 4,
-                    phase: "Visit Preparation",
-                    title: "Day of Visit Setup",
-                    icon: "📋",
-                    color: "from-amber-500 to-orange-600",
-                    tasks: [
-                        { action: "Print Day Sheet", accuroStep: "Reports → Day Sheet → Print", time: "2 min" },
-                        { action: "Pull patient chart", accuroStep: "Search patient (F1) → Open chart", time: "30 sec" },
-                        { action: "Review appointment reason", accuroStep: "Check appointment notes", time: "1 min" },
-                        { action: "Prepare new patient forms", accuroStep: "Forms → New Patient Package → Print", time: "2 min" },
-                        { action: "Set up exam room", accuroStep: "N/A - Physical preparation", time: "3 min" }
-                    ],
-                    outcome: "Clinic ready for patient arrival",
-                    nextAction: "Check in patient"
-                },
-                {
-                    id: 5,
-                    phase: "Patient Arrival",
-                    title: "Check-In Process",
-                    icon: "🏥",
-                    color: "from-rose-500 to-red-600",
-                    tasks: [
-                        { action: "Greet patient warmly", accuroStep: "N/A - Customer service", time: "30 sec" },
-                        { action: "Verify identity & health card", accuroStep: "Check ID, update if needed", time: "1 min" },
-                        { action: "Collect forms", accuroStep: "Review completed forms for completion", time: "2 min" },
-                        { action: "Update appointment status", accuroStep: "Right-click appointment → Status: Arrived", time: "10 sec" },
-                        { action: "Direct to waiting area", accuroStep: "N/A - Direct patient", time: "30 sec" }
-                    ],
-                    outcome: "Patient checked in and ready to be called",
-                    nextAction: "Prepare for clinical encounter"
-                },
-                {
-                    id: 6,
-                    phase: "Clinical Documentation",
-                    title: "Document the Visit",
-                    icon: "📝",
-                    color: "from-cyan-500 to-blue-600",
-                    tasks: [
-                        { action: "Create new encounter", accuroStep: "Open chart → New Encounter", time: "20 sec" },
-                        { action: "Record vitals", accuroStep: "Enter: BP, HR, Temp, Weight, Height", time: "3 min" },
-                        { action: "Document chief complaint", accuroStep: "Subjective section: Patient's reason for visit", time: "2 min" },
-                        { action: "Enter medical history", accuroStep: "Add Problems, Medications, Allergies", time: "10 min" },
-                        { action: "Document physical exam", accuroStep: "Use template or free text", time: "5 min" },
-                        { action: "Record assessment & plan", accuroStep: "Assessment: Diagnosis, Plan: Treatment", time: "5 min" },
-                        { action: "Sign encounter", accuroStep: "Review → Sign → Lock", time: "1 min" }
-                    ],
-                    outcome: "Complete visit documentation signed and locked",
-                    nextAction: "Process orders and prescriptions"
-                },
-                {
-                    id: 7,
-                    phase: "Orders & Prescriptions",
-                    title: "Lab Work & Medications",
-                    icon: "🧪",
-                    color: "from-violet-500 to-purple-600",
-                    tasks: [
-                        { action: "Create lab requisition", accuroStep: "Labs → New Requisition → Select tests", time: "3 min" },
-                        { action: "Add diagnosis codes", accuroStep: "Enter ICD codes for indication", time: "1 min" },
-                        { action: "Print requisition", accuroStep: "Review → Print for patient", time: "30 sec" },
-                        { action: "Create prescriptions", accuroStep: "Rx → New Prescription → Select drug", time: "2 min" },
-                        { action: "Send to pharmacy", accuroStep: "E-prescribe OR Print", time: "1 min" },
-                        { action: "Update medication list", accuroStep: "Verify active medications updated", time: "1 min" }
-                    ],
-                    outcome: "All orders created and sent to appropriate locations",
-                    nextAction: "Schedule follow-up"
-                },
-                {
-                    id: 8,
-                    phase: "Follow-Up Planning",
-                    title: "Book Next Appointment",
-                    icon: "🔁",
-                    color: "from-fuchsia-500 to-pink-600",
-                    tasks: [
-                        { action: "Determine follow-up timing", accuroStep: "Check provider's plan notes", time: "30 sec" },
-                        { action: "Open scheduler", accuroStep: "Scheduler (Ctrl+2)", time: "10 sec" },
-                        { action: "Find appropriate slot", accuroStep: "Navigate to future date per plan", time: "30 sec" },
-                        { action: "Book follow-up", accuroStep: "Create appointment, Type: Follow-up", time: "1 min" },
-                        { action: "Set reminder", accuroStep: "Enable appointment reminder", time: "30 sec" },
-                        { action: "Give appointment card", accuroStep: "Print/write appointment details for patient", time: "1 min" }
-                    ],
-                    outcome: "Follow-up scheduled and patient informed",
-                    nextAction: "Complete billing"
-                },
-                {
-                    id: 9,
-                    phase: "Billing",
-                    title: "Submit Claims",
-                    icon: "💳",
-                    color: "from-lime-500 to-green-600",
-                    tasks: [
-                        { action: "Access billing module", accuroStep: "Billing → Claims", time: "10 sec" },
-                        { action: "Select service code", accuroStep: "Choose appropriate billing code", time: "1 min" },
-                        { action: "Add diagnosis codes", accuroStep: "Enter ICD codes", time: "30 sec" },
-                        { action: "Review claim", accuroStep: "Verify patient, provider, codes, fee", time: "1 min" },
-                        { action: "Submit claim", accuroStep: "Submit to provincial health plan", time: "30 sec" }
-                    ],
-                    outcome: "Claim submitted for payment",
-                    nextAction: "Results management"
-                },
-                {
-                    id: 10,
-                    phase: "Results Management",
-                    title: "Process Lab Results",
-                    icon: "🔬",
-                    color: "from-teal-500 to-cyan-600",
-                    tasks: [
-                        { action: "Check results inbox", accuroStep: "Lab Results → Pending/Unreviewed", time: "30 sec" },
-                        { action: "Review each result", accuroStep: "Open result, check values vs ranges", time: "2 min" },
-                        { action: "Flag abnormals", accuroStep: "Note abnormal values, assess urgency", time: "1 min" },
-                        { action: "Document review", accuroStep: "Mark as Reviewed, add provider comments", time: "1 min" },
-                        { action: "Create follow-up plan", accuroStep: "Create task/phone encounter if needed", time: "2 min" },
-                        { action: "Contact patient", accuroStep: "Phone call or message with results", time: "5 min" },
-                        { action: "Schedule recheck if needed", accuroStep: "Book appointment, order repeat labs", time: "3 min" }
-                    ],
-                    outcome: "Results reviewed, patient notified, follow-up planned",
-                    nextAction: "Ongoing care and monitoring"
-                },
-                {
-                    id: 11,
-                    phase: "Ongoing Care",
-                    title: "Preventive Care & Monitoring",
-                    icon: "❤️",
-                    color: "from-pink-500 to-rose-600",
-                    tasks: [
-                        { action: "Review preventive care", accuroStep: "Chart → Preventive Care section", time: "2 min" },
-                        { action: "Check screening status", accuroStep: "Review: Mammography, PAP, Colonoscopy, etc.", time: "2 min" },
-                        { action: "Set up reminders", accuroStep: "Create ticklers for due screenings", time: "2 min" },
-                        { action: "Track referrals", accuroStep: "Monitor pending referrals for responses", time: "1 min" },
-                        { action: "Manage chronic conditions", accuroStep: "Review problem list, medication compliance", time: "3 min" },
-                        { action: "Generate recall lists", accuroStep: "Reports → Overdue preventive care", time: "2 min" }
-                    ],
-                    outcome: "Comprehensive ongoing care plan maintained",
-                    nextAction: "Continue patient relationship"
+            const handleAuth = async (e) => {
+                e.preventDefault();
+                setError('');
+                setLoading(true);
+                
+                const { createUserWithEmailAndPassword, signInWithEmailAndPassword } = window.firebaseModules;
+                
+                try {
+                    if (isSignUp) {
+                        await createUserWithEmailAndPassword(auth, email, password);
+                    } else {
+                        await signInWithEmailAndPassword(auth, email, password);
+                    }
+                    // Save email to localStorage for next time
+                    localStorage.setItem('accuro_last_email', email);
+                } catch (err) {
+                    setError(err.message);
+                    setLoading(false);
                 }
+            };
+
+            return (
+                <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 p-4">
+                    <div className="bg-white p-8 rounded-2xl shadow-2xl w-full max-w-md">
+                        <div className="text-center mb-8">
+                            <div className="text-5xl mb-3">🏥</div>
+                            <h1 className="text-3xl font-black text-gray-800 mb-2">
+                                Accuro Training
+                            </h1>
+                            <p className="text-gray-600">
+                                Student Portal
+                            </p>
+                        </div>
+                        
+                        <form onSubmit={handleAuth} className="space-y-4">
+                            <div>
+                                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                                    Email Address
+                                </label>
+                                <input
+                                    type="email"
+                                    value={email}
+                                    onChange={(e) => setEmail(e.target.value)}
+                                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
+                                    placeholder="you@example.com"
+                                    required
+                                />
+                            </div>
+                            
+                            <div>
+                                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                                    Password
+                                </label>
+                                <input
+                                    type="password"
+                                    value={password}
+                                    onChange={(e) => setPassword(e.target.value)}
+                                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
+                                    placeholder="••••••••"
+                                    required
+                                    minLength="6"
+                                />
+                            </div>
+                            
+                            {error && (
+                                <div className="bg-red-50 border-2 border-red-200 text-red-700 p-3 rounded-xl text-sm">
+                                    {error}
+                                </div>
+                            )}
+                            
+                            <button
+                                type="submit"
+                                disabled={loading}
+                                className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 text-white py-3 rounded-xl font-bold hover:from-indigo-700 hover:to-purple-700 transition shadow-lg disabled:opacity-50"
+                            >
+                                {loading ? 'Please wait...' : (isSignUp ? 'Create Account' : 'Sign In')}
+                            </button>
+
+			<div className="mt-4 text-center">
+    			<button
+        		type="button"
+        		onClick={async () => {
+            			if (!email) {
+                			setError('Please enter your email address first');
+                			return;
+            			}
+            			try {
+                			const { sendPasswordResetEmail } = window.firebaseModules;
+                			await sendPasswordResetEmail(auth, email);
+                			alert(`Password reset email sent to ${email}. Check your inbox (and spam folder)!`);
+            			} catch (err) {
+                			console.error('Password reset error:', err);
+                			console.error('Error code:', err.code);
+                			console.error('Error message:', err.message);
+                			
+                			// Show user-friendly error
+                			if (err.code === 'auth/user-not-found') {
+                			    alert('No account found with this email address.');
+                			} else if (err.code === 'auth/invalid-email') {
+                			    alert('Invalid email address format.');
+                			} else if (err.code === 'auth/too-many-requests') {
+                			    alert('Too many reset attempts. Please try again later.');
+                			} else {
+                			    alert(`Error sending reset email: ${err.message}`);
+                			}
+                			setError(err.message);
+            			}
+        		}}
+        			className="text-sm text-indigo-600 hover:underline"
+    			>
+        			Forgot password?
+    			</button>
+			</div>			
+
+                        </form>
+                        
+                        <div className="mt-6 text-center">
+                            <button
+                                onClick={() => {
+                                    setIsSignUp(!isSignUp);
+                                    setError('');
+                                }}
+                                className="text-indigo-600 hover:underline text-sm font-semibold"
+                            >
+                                {isSignUp ? 'Already have an account? Sign in' : "Don't have an account? Sign up"}
+                            </button>
+                        </div>
+                        
+                        {isSignUp && (
+                            <div className="mt-4 text-xs text-gray-500 text-center">
+                                By signing up, you agree to our Terms of Service
+                            </div>
+                        )}
+                        
+                        <div className="mt-6 pt-6 border-t border-gray-200 text-center">
+                            <p className="text-sm text-gray-600 mb-2">Are you a trainer?</p>
+                            <a href="admin.html" className="text-indigo-600 hover:underline font-semibold text-sm">
+                                Go to Admin Portal →
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+        
+        // ============================================
+        // SPECIALTY SELECTION COMPONENT
+        // ============================================
+        function SpecialtySelector({ user, onComplete }) {
+            const [specialty, setSpecialty] = useState('');
+            const [displayName, setDisplayName] = useState('');
+            const [loading, setLoading] = useState(false);
+            
+            const specialties = [
+                { id: 'nurse', name: 'Registered Nurse', icon: '👩‍⚕️', color: 'from-blue-400 to-blue-600' },
+                { id: 'moa', name: 'Medical Office Assistant', icon: '💼', color: 'from-purple-400 to-purple-600' },
+                { id: 'dietician', name: 'Dietician', icon: '🥗', color: 'from-green-400 to-green-600' },
+                { id: 'physician', name: 'Physician', icon: '👨‍⚕️', color: 'from-red-400 to-red-600' },
+                { id: 'pharmacist', name: 'Pharmacist', icon: '💊', color: 'from-pink-400 to-pink-600' },
+                { id: 'lab_tech', name: 'Lab Technician', icon: '🔬', color: 'from-cyan-400 to-cyan-600' }
             ];
+            
+            const handleSubmit = async () => {
+                if (!specialty || !displayName.trim()) return;
+                
+                setLoading(true);
+                const { doc, setDoc, serverTimestamp } = window.firebaseModules;
+                
+                try {
+                    await setDoc(doc(db, 'users', user.uid), {
+                        email: user.email,
+                        displayName: displayName.trim(),
+                        specialty: specialty,
+                        role: 'student',
+                        createdAt: serverTimestamp(),
+                        lastLogin: serverTimestamp()
+                    });
+                    
+                    onComplete();
+                } catch (err) {
+                    console.error('Error saving profile:', err);
+                    setLoading(false);
+                }
+            };
+            
+            return (
+                <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 p-4">
+                    <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-3xl">
+                        <div className="text-center mb-8">
+                            <h2 className="text-4xl font-black text-gray-800 mb-2">
+                                Welcome! 👋
+                            </h2>
+                            <p className="text-gray-600 text-lg">
+                                Let's set up your learning profile
+                            </p>
+                        </div>
+                        
+                        {/* Display Name */}
+                        <div className="mb-8">
+                            <label className="block text-lg font-bold text-gray-700 mb-3">
+                                What's your name?
+                            </label>
+                            <input
+                                type="text"
+                                value={displayName}
+                                onChange={(e) => setDisplayName(e.target.value)}
+                                className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-lg"
+                                placeholder="Enter your full name"
+                            />
+                        </div>
+                        
+                        {/* Specialty Selection */}
+                        <div className="mb-8">
+                            <label className="block text-lg font-bold text-gray-700 mb-3">
+                                My specialty:
+                            </label>
+                            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                                {specialties.map(spec => (
+                                    <button
+                                        type="button"
+                                        key={spec.id}
+                                        onClick={() => setSpecialty(spec.id)}
+                                        className={`p-4 rounded-xl border-2 transition transform hover:scale-105 ${
+                                            specialty === spec.id 
+                                                ? 'border-indigo-500 shadow-lg' 
+                                                : 'border-gray-200 hover:border-gray-300'
+                                        }`}
+                                    >
+                                        <div className={`w-full h-2 rounded-full mb-3 bg-gradient-to-r ${spec.color}`}></div>
+                                        <div className="text-3xl mb-2">{spec.icon}</div>
+                                        <div className="font-semibold text-sm">{spec.name}</div>
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                        
+                        <button
+                            onClick={handleSubmit}
+                            disabled={!specialty || !displayName.trim() || loading}
+                            className={`w-full py-4 rounded-xl font-bold text-lg transition shadow-lg ${
+                                specialty && displayName.trim() && !loading
+                                    ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white hover:from-indigo-700 hover:to-purple-700' 
+                                    : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                            }`}
+                        >
+                            {loading ? 'Setting up...' : 'Continue to Training'}
+                        </button>
+                    </div>
+                </div>
+            );
+        }
+        
+        // ============================================
+        // STUDENT DASHBOARD (NEW!)
+        // ============================================
+        function StudentDashboard({ user, userProfile, onStartJourney }) {
+            const [progress, setProgress] = useState(null);
+            const [journey, setJourney] = useState(null);
+            const [loading, setLoading] = useState(true);
+            
+            useEffect(() => {
+                loadDashboardData();
+            }, []);
+            
+            const loadDashboardData = async () => {
+                const { collection, query, where, getDocs, doc, getDoc, onSnapshot } = window.firebaseModules;
+                
+                try {
+                    // Load journey for specialty
+                    const journeysRef = collection(db, 'journeys');
+                    const q = query(
+                        journeysRef,
+                        where('specialty', '==', userProfile.specialty),
+                        where('status', '==', 'published')
+                    );
+                    const querySnapshot = await getDocs(q);
+                    
+                    if (!querySnapshot.empty) {
+                        const journeyDoc = querySnapshot.docs[0];
+                        const journeyData = { id: journeyDoc.id, ...journeyDoc.data() };
+                        setJourney(journeyData);
+                        
+                        // Listen to progress
+                        const progressId = `${user.uid}_${userProfile.specialty}`;
+                        const progressRef = doc(db, 'userProgress', progressId);
+                        
+                        onSnapshot(progressRef, (doc) => {
+                            if (doc.exists()) {
+                                setProgress(doc.data());
+                            } else {
+                                // Initialize progress
+                                const { setDoc, serverTimestamp } = window.firebaseModules;
+                                setDoc(progressRef, {
+                                    userId: user.uid,
+                                    specialty: userProfile.specialty,
+                                    startedAt: serverTimestamp(),
+                                    completedStepIds: [],
+                                    status: 'in_progress',
+                                    currentStepIndex: 0
+                                });
+                            }
+                        });
+                    }
+                    
+                    setLoading(false);
+                } catch (err) {
+                    console.error('Error loading dashboard:', err);
+                    setLoading(false);
+                }
+            };
+            
+            const calculateProgress = () => {
+                if (!progress || !journey || !journey.stepIds) return 0;
+                return Math.round((progress.completedStepIds?.length || 0) / journey.stepIds.length * 100);
+            };
+            
+            const handleSignOut = async () => {
+                const { signOut } = window.firebaseModules;
+                await signOut(auth);
+            };
+            
+            if (loading) {
+                return (
+                    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
+                        <div className="text-center">
+                            <div className="text-6xl mb-4">⏳</div>
+                            <div className="text-xl font-semibold text-gray-600">Loading your dashboard...</div>
+                        </div>
+                    </div>
+                );
+            }
+            
+            if (!journey) {
+                return (
+                    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 p-4">
+                        <div className="bg-white rounded-2xl shadow-xl p-8 max-w-lg text-center">
+                            <div className="text-6xl mb-4">🎓</div>
+                            <h2 className="text-3xl font-bold text-gray-800 mb-2">Welcome to Accuro Training!</h2>
+                            <p className="text-lg text-indigo-600 font-semibold mb-6">
+                                {userProfile.displayName} • {userProfile.specialty.toUpperCase()}
+                            </p>
+                            
+                            <div className="bg-yellow-50 border-2 border-yellow-200 rounded-lg p-6 mb-6">
+                                <div className="text-4xl mb-3">🚧</div>
+                                <h3 className="text-xl font-bold text-gray-800 mb-2">Training Journey Coming Soon</h3>
+                                <p className="text-gray-700">
+                                    Your trainer is currently preparing training content specifically for 
+                                    <strong className="text-indigo-600"> {userProfile.specialty}</strong> professionals.
+                                </p>
+                            </div>
+                            
+                            <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-4 mb-6 text-left">
+                                <h4 className="font-bold text-gray-800 mb-2">📋 What happens next:</h4>
+                                <ul className="text-sm text-gray-700 space-y-2">
+                                    <li className="flex items-start gap-2">
+                                        <span className="text-blue-500 mt-0.5">✓</span>
+                                        <span>Your trainer will publish your training journey soon</span>
+                                    </li>
+                                    <li className="flex items-start gap-2">
+                                        <span className="text-blue-500 mt-0.5">✓</span>
+                                        <span>You'll be able to access it by logging back in</span>
+                                    </li>
+                                    <li className="flex items-start gap-2">
+                                        <span className="text-blue-500 mt-0.5">✓</span>
+                                        <span>No action required from you right now</span>
+                                    </li>
+                                </ul>
+                            </div>
+                            
+                            <p className="text-sm text-gray-600 mb-4">
+                                💬 <strong>Need help?</strong> Contact your trainer for more information.
+                            </p>
+                            
+                            <button
+                                onClick={handleSignOut}
+                                className="w-full px-6 py-3 bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white font-semibold rounded-lg transition shadow-lg"
+                            >
+                                Sign Out
+                            </button>
+                        </div>
+                    </div>
+                );
+            }
+            
+            const progressPercent = calculateProgress();
+            const completedSteps = progress?.completedStepIds?.length || 0;
+            const totalSteps = journey.stepIds?.length || 0;
+            const daysActive = progress?.startedAt ? Math.floor((Date.now() - progress.startedAt.toDate()) / (1000 * 60 * 60 * 24)) : 0;
+            
+            return (
+                <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
+                    {/* Header */}
+                    <div className="bg-white shadow-sm border-b border-gray-200">
+                        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+                            <div className="flex justify-between items-center">
+                                <div>
+                                    <h1 className="text-2xl font-bold text-gray-800">Accuro Training</h1>
+                                    <p className="text-sm text-gray-600">{userProfile.displayName} • {userProfile.specialty}</p>
+                                </div>
+                                <button
+                                    onClick={handleSignOut}
+                                    className="flex items-center gap-2 px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition"
+                                >
+                                    <LogOut className="w-4 h-4" />
+                                    Sign Out
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    {/* Dashboard Content */}
+                    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+                        {/* Welcome Section */}
+                        <div className="mb-8">
+                            <h2 className="text-3xl font-black text-gray-800 mb-2">
+                                Welcome back, {userProfile.displayName.split(' ')[0]}! 👋
+                            </h2>
+                            <p className="text-gray-600">
+                                {progressPercent === 100 
+                                    ? "Congratulations on completing your training!" 
+                                    : progressPercent > 0 
+                                        ? "Keep up the great progress on your journey!" 
+                                        : "Ready to start your training journey?"}
+                            </p>
+                        </div>
+                        
+                        {/* Stats Cards */}
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                            <div className="bg-white rounded-xl shadow-lg p-6 border-l-4 border-indigo-500">
+                                <div className="flex items-center justify-between mb-2">
+                                    <div className="text-sm font-semibold text-gray-600">Overall Progress</div>
+                                    <div className="text-3xl">{progressPercent === 100 ? '🎉' : '📊'}</div>
+                                </div>
+                                <div className="text-4xl font-black text-gray-800 mb-2">{progressPercent}%</div>
+                                <div className="text-sm text-gray-600">{completedSteps} of {totalSteps} steps completed</div>
+                            </div>
+                            
+                            <div className="bg-white rounded-xl shadow-lg p-6 border-l-4 border-green-500">
+                                <div className="flex items-center justify-between mb-2">
+                                    <div className="text-sm font-semibold text-gray-600">Current Journey</div>
+                                    <div className="text-3xl">🗺️</div>
+                                </div>
+                                <div className="text-xl font-bold text-gray-800 mb-2">{journey.title}</div>
+                                <div className="text-sm text-gray-600">{userProfile.specialty} training</div>
+                            </div>
+                            
+                            <div className="bg-white rounded-xl shadow-lg p-6 border-l-4 border-purple-500">
+                                <div className="flex items-center justify-between mb-2">
+                                    <div className="text-sm font-semibold text-gray-600">Days Active</div>
+                                    <div className="text-3xl">📅</div>
+                                </div>
+                                <div className="text-4xl font-black text-gray-800 mb-2">{daysActive}</div>
+                                <div className="text-sm text-gray-600">Keep the momentum going!</div>
+                            </div>
+                        </div>
+                        
+                        {/* Progress Bar */}
+                        <div className="bg-white rounded-xl shadow-lg p-6 mb-8">
+                            <div className="flex justify-between items-center mb-4">
+                                <h3 className="text-xl font-bold text-gray-800">Your Progress</h3>
+                                <span className="text-2xl font-black text-indigo-600">{progressPercent}%</span>
+                            </div>
+                            <div className="h-4 bg-gray-200 rounded-full overflow-hidden mb-2">
+                                <div 
+                                    className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 transition-all duration-500"
+                                    style={{ width: `${progressPercent}%` }}
+                                />
+                            </div>
+                            <p className="text-sm text-gray-600">
+                                {progressPercent === 100 
+                                    ? "You've completed all steps! Great job!" 
+                                    : `${totalSteps - completedSteps} ${totalSteps - completedSteps === 1 ? 'step' : 'steps'} remaining`}
+                            </p>
+                        </div>
+                        
+                        {/* Action Buttons */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <button
+                                onClick={onStartJourney}
+                                className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl p-8 hover:from-indigo-700 hover:to-purple-700 transition shadow-lg transform hover:scale-105"
+                            >
+                                <div className="flex items-center justify-between mb-4">
+                                    <BookOpen className="w-12 h-12" />
+                                    <ChevronRight className="w-8 h-8" />
+                                </div>
+                                <div className="text-2xl font-bold mb-2">
+                                    {progressPercent === 0 ? 'Start Training' : progressPercent === 100 ? 'Review Journey' : 'Continue Training'}
+                                </div>
+                                <div className="text-indigo-100">
+                                    {progressPercent === 100 ? 'Review completed steps' : `Resume from step ${completedSteps + 1}`}
+                                </div>
+                            </button>
+                            
+                            <div className="bg-white rounded-xl p-8 shadow-lg border-2 border-gray-200">
+                                <div className="flex items-center justify-between mb-4">
+                                    <User className="w-12 h-12 text-gray-400" />
+                                </div>
+                                <div className="text-2xl font-bold text-gray-800 mb-2">My Profile</div>
+                                <div className="space-y-2 text-sm text-gray-600">
+                                    <div><strong>Name:</strong> {userProfile.displayName}</div>
+                                    <div><strong>Specialty:</strong> {userProfile.specialty}</div>
+                                    <div><strong>Role:</strong> Student</div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        {/* Completion Badge */}
+                        {progressPercent === 100 && (
+                            <div className="mt-8 bg-gradient-to-r from-green-400 to-emerald-500 rounded-xl shadow-lg p-8 text-center text-white">
+                                <div className="text-6xl mb-4">🏆</div>
+                                <h3 className="text-3xl font-black mb-2">Training Complete!</h3>
+                                <p className="text-xl">
+                                    You've successfully completed the {journey.title}
+                                </p>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            );
+        }
+        
+        // ============================================
+        // PATIENT JOURNEY COMPONENT (Same as before, but accessed from dashboard)
+        // ============================================
+        function PatientJourney({ user, userProfile, onBackToDashboard }) {
+            const [journey, setJourney] = useState(null);
+            const [loading, setLoading] = useState(true);
+            const [activeStep, setActiveStep] = useState(0);
+            const [showDetails, setShowDetails] = useState(null);
+            const [completedSteps, setCompletedSteps] = useState([]);
+            const [progress, setProgress] = useState(null);
+
+            useEffect(() => {
+                loadJourneyAndProgress();
+            }, [userProfile.specialty]);
+
+            const loadJourneyAndProgress = async () => {
+                const { collection, query, where, getDocs, doc, getDoc, onSnapshot } = window.firebaseModules;
+                
+                try {
+                    const journeysRef = collection(db, 'journeys');
+                    const q = query(
+                        journeysRef,
+                        where('specialty', '==', userProfile.specialty),
+                        where('status', '==', 'published')
+                    );
+                    const querySnapshot = await getDocs(q);
+                    
+                    if (!querySnapshot.empty) {
+                        const journeyDoc = querySnapshot.docs[0];
+                        const journeyData = { id: journeyDoc.id, ...journeyDoc.data() };
+                        
+                        const stepsPromises = journeyData.stepIds.map(stepId =>
+                            getDoc(doc(db, 'steps', stepId))
+                        );
+                        const stepsDocs = await Promise.all(stepsPromises);
+                        const steps = stepsDocs
+                            .filter(doc => doc.exists())
+                            .map(doc => ({ id: doc.id, ...doc.data() }));
+                        
+                        for (let step of steps) {
+                            if (step.taskIds && step.taskIds.length > 0) {
+                                const tasksPromises = step.taskIds.map(taskId =>
+                                    getDoc(doc(db, 'tasks', taskId))
+                                );
+                                const tasksDocs = await Promise.all(tasksPromises);
+                                step.tasks = tasksDocs
+                                    .filter(doc => doc.exists())
+                                    .map(doc => ({ id: doc.id, ...doc.data() }))
+                                    .sort((a, b) => a.order - b.order);
+                            } else {
+                                step.tasks = [];
+                            }
+                        }
+                        
+                        steps.sort((a, b) => a.order - b.order);
+                        journeyData.steps = steps;
+                        setJourney(journeyData);
+                    } else {
+                        setJourney({ steps: [] });
+                    }
+                    
+                    const progressId = `${user.uid}_${userProfile.specialty}`;
+                    const progressRef = doc(db, 'userProgress', progressId);
+                    
+                    const unsubscribe = onSnapshot(progressRef, (doc) => {
+                        if (doc.exists()) {
+                            const data = doc.data();
+                            setProgress(data);
+                            setCompletedSteps(data.completedStepIds || []);
+                        } else {
+                            const { setDoc, serverTimestamp } = window.firebaseModules;
+                            setDoc(progressRef, {
+                                userId: user.uid,
+                                specialty: userProfile.specialty,
+                                startedAt: serverTimestamp(),
+                                completedStepIds: [],
+                                status: 'in_progress',
+                                currentStepIndex: 0
+                            });
+                        }
+                    });
+                    
+                    setLoading(false);
+                    return () => unsubscribe();
+                    
+                } catch (err) {
+                    console.error('Error loading journey:', err);
+                    setLoading(false);
+                }
+            };
 
             const handleStepClick = (index) => {
                 setActiveStep(index);
                 setShowDetails(index);
             };
 
-            const markComplete = (index) => {
-                if (!completedSteps.includes(index)) {
-                    setCompletedSteps([...completedSteps, index]);
-                }
-                if (index < journey.length - 1) {
-                    setActiveStep(index + 1);
-                    setShowDetails(index + 1);
+            const markComplete = async (stepId, index) => {
+                const { doc, updateDoc, arrayUnion, serverTimestamp } = window.firebaseModules;
+                
+                const progressId = `${user.uid}_${userProfile.specialty}`;
+                const progressRef = doc(db, 'userProgress', progressId);
+                
+                try {
+                    await updateDoc(progressRef, {
+                        completedStepIds: arrayUnion(stepId),
+                        currentStepIndex: index + 1,
+                        lastUpdated: serverTimestamp()
+                    });
+                    
+                    if (index < journey.steps.length - 1) {
+                        setActiveStep(index + 1);
+                        setShowDetails(index + 1);
+                    }
+                } catch (err) {
+                    console.error('Error marking complete:', err);
                 }
             };
 
-            const resetJourney = () => {
-                setActiveStep(0);
-                setCompletedSteps([]);
-                setShowDetails(null);
+            const resetJourney = async () => {
+                if (!confirm('Are you sure you want to reset your progress?')) return;
+                
+                const { doc, updateDoc } = window.firebaseModules;
+                const progressId = `${user.uid}_${userProfile.specialty}`;
+                const progressRef = doc(db, 'userProgress', progressId);
+                
+                try {
+                    await updateDoc(progressRef, {
+                        completedStepIds: [],
+                        currentStepIndex: 0,
+                        status: 'in_progress'
+                    });
+                    setActiveStep(0);
+                    setShowDetails(null);
+                } catch (err) {
+                    console.error('Error resetting:', err);
+                }
             };
 
             const calculateProgress = () => {
-                return Math.round((completedSteps.length / journey.length) * 100);
+                if (!journey || !journey.steps || journey.steps.length === 0) return 0;
+                return Math.round((completedSteps.length / journey.steps.length) * 100);
             };
+
+            const handleSignOut = async () => {
+                const { signOut } = window.firebaseModules;
+                await signOut(auth);
+            };
+
+            if (loading) {
+                return (
+                    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
+                        <div className="text-center">
+                            <div className="text-6xl mb-4">⏳</div>
+                            <div className="text-xl font-semibold text-gray-600">Loading your journey...</div>
+                        </div>
+                    </div>
+                );
+            }
+
+            if (!journey || !journey.steps || journey.steps.length === 0) {
+                return (
+                    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 p-4">
+                        <div className="bg-white rounded-2xl shadow-xl p-8 max-w-lg text-center">
+                            <div className="text-6xl mb-4">🎓</div>
+                            <h2 className="text-3xl font-bold text-gray-800 mb-2">Journey Content Unavailable</h2>
+                            
+                            <div className="bg-yellow-50 border-2 border-yellow-200 rounded-lg p-6 mb-6">
+                                <div className="text-4xl mb-3">⚠️</div>
+                                <p className="text-gray-700">
+                                    This training journey for <strong className="text-indigo-600">{userProfile.specialty}</strong> has no steps yet.
+                                </p>
+                            </div>
+                            
+                            <p className="text-sm text-gray-600 mb-6">
+                                Your trainer is working on adding content. Please check back later or contact them for updates.
+                            </p>
+                            
+                            <button
+                                onClick={onBackToDashboard}
+                                className="w-full px-6 py-3 bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white font-semibold rounded-lg transition shadow-lg"
+                            >
+                                Back to Dashboard
+                            </button>
+                        </div>
+                    </div>
+                );
+            }
 
             return (
                 <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 p-4 md:p-8">
                     {/* Header */}
                     <div className="max-w-7xl mx-auto mb-8">
                         <div className="bg-white rounded-2xl shadow-xl p-6 md:p-8 border-4 border-indigo-600">
-                            <h1 className="text-4xl md:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-purple-600 mb-3">
-                                Sarah's Patient Journey
-                            </h1>
-                            <p className="text-xl text-slate-600 mb-4">
-                                Interactive Accuro EMR Training Guide
-                            </p>
+                            <div className="flex justify-between items-start mb-4">
+                                <div className="flex-1">
+                                    <button
+                                        onClick={onBackToDashboard}
+                                        className="flex items-center gap-2 text-indigo-600 hover:text-indigo-800 mb-4 font-semibold"
+                                    >
+                                        <Home className="w-5 h-5" />
+                                        Back to Dashboard
+                                    </button>
+                                    <h1 className="text-4xl md:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-purple-600 mb-2">
+                                        {journey.title || 'Your Training Journey'}
+                                    </h1>
+                                    <p className="text-xl text-slate-600 mb-2">
+                                        {userProfile.displayName} • {userProfile.specialty.toUpperCase()}
+                                    </p>
+                                    <p className="text-gray-500">{journey.description}</p>
+                                    
+                                    {/* Journey Attachments/Links */}
+                                    {journey.attachments && journey.attachments.length > 0 && (
+                                        <div className="mt-4">
+                                            <h3 className="text-sm font-semibold text-gray-700 mb-2">📎 Reference Materials:</h3>
+                                            <div className="flex flex-wrap gap-2">
+                                                {journey.attachments.map((link, index) => (
+                                                    <a
+                                                        key={index}
+                                                        href={link.url}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        className="inline-flex items-center gap-2 px-3 py-2 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 transition text-sm"
+                                                    >
+                                                        <span>🔗</span>
+                                                        <span>{link.name}</span>
+                                                    </a>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                                <button
+                                    onClick={handleSignOut}
+                                    className="flex items-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition"
+                                >
+                                    <LogOut className="w-4 h-4" />
+                                    Sign Out
+                                </button>
+                            </div>
+                            
                             <div className="flex items-center gap-4 flex-wrap">
                                 <div className="flex-1 min-w-[200px]">
                                     <div className="flex justify-between text-sm font-semibold text-slate-700 mb-2">
@@ -290,51 +907,45 @@
                                     onClick={resetJourney}
                                     className="px-6 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold rounded-lg transition-colors"
                                 >
-                                    Reset Journey
+                                    Reset Progress
                                 </button>
                             </div>
                         </div>
                     </div>
 
-                    {/* Journey Timeline */}
+                    {/* Journey Steps - KEEPING THE SAME IMPLEMENTATION AS BEFORE */}
                     <div className="max-w-7xl mx-auto">
                         <div className="grid gap-6 mb-8">
-                            {journey.map((step, index) => {
-                                const isCompleted = completedSteps.includes(index);
+                            {journey.steps.map((step, index) => {
+                                const isCompleted = completedSteps.includes(step.id);
                                 const isActive = activeStep === index;
                                 const isExpanded = showDetails === index;
                                 
                                 return (
                                     <div key={step.id} className="relative">
-                                        {/* Connection line to next step */}
-                                        {index < journey.length - 1 && (
+                                        {index < journey.steps.length - 1 && (
                                             <div className="absolute left-8 top-20 w-1 h-16 bg-gradient-to-b from-slate-300 to-slate-200 z-0" />
                                         )}
                                         
                                         <div
                                             onClick={() => handleStepClick(index)}
-                                            className={`
-                                                relative z-10 bg-white rounded-2xl shadow-lg transition-all duration-300 cursor-pointer
-                                                ${isActive ? 'ring-4 ring-indigo-400 shadow-2xl scale-[1.02]' : 'hover:shadow-xl hover:scale-[1.01]'}
-                                                ${isCompleted ? 'opacity-75' : ''}
-                                            `}
+                                            className={`relative z-10 bg-white rounded-2xl shadow-lg transition-all duration-300 cursor-pointer ${
+                                                isActive ? 'ring-4 ring-indigo-400 shadow-2xl scale-[1.02]' : 'hover:shadow-xl hover:scale-[1.01]'
+                                            } ${isCompleted ? 'opacity-75' : ''}`}
                                         >
-                                            {/* Step Header */}
                                             <div className="p-6">
                                                 <div className="flex items-center gap-4">
-                                                    {/* Step Number & Icon */}
-                                                    <div className={`relative flex-shrink-0 w-16 h-16 rounded-xl flex items-center justify-center bg-gradient-to-br ${step.color} shadow-lg`}>
+                                                    <div className={`relative flex-shrink-0 w-16 h-16 rounded-xl flex items-center justify-center bg-gradient-to-br ${step.color || 'from-gray-400 to-gray-600'} shadow-lg`}>
                                                         {isCompleted ? (
-                                                            <Check className="w-8 h-8 text-white" strokeWidth={3} />
+                                                            <Check className="w-8 h-8 text-white" />
                                                         ) : (
-                                                            <span className="text-3xl">{step.icon}</span>
+                                                            <span className="text-3xl">{step.icon || '📌'}</span>
                                                         )}
                                                         <div className="absolute -top-2 -right-2 w-8 h-8 bg-white rounded-full flex items-center justify-center font-black text-sm text-slate-700 shadow-md border-2 border-slate-200">
                                                             {index + 1}
                                                         </div>
                                                     </div>
 
-                                                    {/* Step Title */}
                                                     <div className="flex-1">
                                                         <div className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-1">
                                                             {step.phase}
@@ -344,50 +955,61 @@
                                                         </h3>
                                                     </div>
 
-                                                    {/* Expand indicator */}
                                                     <div className={`transform transition-transform ${isExpanded ? 'rotate-90' : ''}`}>
                                                         <ChevronRight className="w-6 h-6 text-slate-400" />
                                                     </div>
                                                 </div>
                                             </div>
 
-                                            {/* Expanded Details */}
                                             {isExpanded && (
                                                 <div className="border-t border-slate-200 p-6 bg-gradient-to-br from-slate-50 to-white">
-                                                    {/* Tasks */}
-                                                    <div className="mb-6">
-                                                        <h4 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
-                                                            <span className={`w-2 h-2 rounded-full bg-gradient-to-r ${step.color}`} />
-                                                            Tasks to Complete
-                                                        </h4>
-                                                        <div className="space-y-3">
-                                                            {step.tasks.map((task, taskIndex) => (
-                                                                <div 
-                                                                    key={taskIndex}
-                                                                    className="bg-white rounded-lg p-4 border-2 border-slate-200 hover:border-indigo-300 transition-colors"
-                                                                >
-                                                                    <div className="flex items-start gap-3">
-                                                                        <div className="flex-shrink-0 w-6 h-6 rounded-full bg-gradient-to-br from-indigo-100 to-purple-100 flex items-center justify-center text-xs font-bold text-indigo-700">
-                                                                            {taskIndex + 1}
-                                                                        </div>
-                                                                        <div className="flex-1">
-                                                                            <div className="font-bold text-slate-800 mb-1">
-                                                                                {task.action}
+                                                    {step.tasks && step.tasks.length > 0 && (
+                                                        <div className="mb-6">
+                                                            <h4 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
+                                                                <span className={`w-2 h-2 rounded-full bg-gradient-to-r ${step.color || 'from-gray-400 to-gray-600'}`} />
+                                                                Tasks to Complete
+                                                            </h4>
+                                                            <div className="space-y-3">
+                                                                {step.tasks.map((task, taskIndex) => (
+                                                                    <div 
+                                                                        key={task.id}
+                                                                        className="bg-white rounded-lg p-4 border-2 border-slate-200 hover:border-indigo-300 transition-colors"
+                                                                    >
+                                                                        <div className="flex items-start gap-3">
+                                                                            <div className="flex-shrink-0 w-6 h-6 rounded-full bg-gradient-to-br from-indigo-100 to-purple-100 flex items-center justify-center text-xs font-bold text-indigo-700">
+                                                                                {taskIndex + 1}
                                                                             </div>
-                                                                            <div className="text-sm font-mono bg-indigo-50 text-indigo-700 px-3 py-1 rounded inline-block mb-1">
-                                                                                {task.accuroStep}
-                                                                            </div>
-                                                                            <div className="text-xs text-slate-500">
-                                                                                ⏱️ Est. time: {task.time}
+                                                                            <div className="flex-1">
+                                                                                <div className="font-bold text-slate-800 mb-1">
+                                                                                    {task.action}
+                                                                                </div>
+                                                                                <div className="text-sm font-mono bg-indigo-50 text-indigo-700 px-3 py-1 rounded inline-block mb-1">
+                                                                                    {task.accuroNavigation}
+                                                                                </div>
+                                                                                <div className="text-xs text-slate-500">
+                                                                                    ⏱️ Est. time: {task.estimatedTime}
+                                                                                </div>
+                                                                                {task.screenshotUrl && (
+                                                                                    <div className="mt-2">
+                                                                                        <a
+                                                                                            href={task.screenshotUrl}
+                                                                                            target="_blank"
+                                                                                            rel="noopener noreferrer"
+                                                                                            className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline"
+                                                                                        >
+                                                                                            <span>📸</span>
+                                                                                            <span>View screenshot</span>
+                                                                                        </a>
+                                                                                    </div>
+                                                                                )}
                                                                             </div>
                                                                         </div>
                                                                     </div>
-                                                                </div>
-                                                            ))}
+                                                                ))}
+                                                            </div>
                                                         </div>
-                                                    </div>
+                                                    )}
 
-                                                    {/* Outcome & Next Action */}
                                                     <div className="grid md:grid-cols-2 gap-4 mb-6">
                                                         <div className="bg-green-50 border-2 border-green-200 rounded-lg p-4">
                                                             <div className="text-xs font-bold text-green-600 uppercase tracking-wider mb-2">
@@ -407,20 +1029,17 @@
                                                         </div>
                                                     </div>
 
-                                                    {/* Mark Complete Button */}
                                                     <button
                                                         onClick={(e) => {
                                                             e.stopPropagation();
-                                                            markComplete(index);
+                                                            markComplete(step.id, index);
                                                         }}
                                                         disabled={isCompleted}
-                                                        className={`
-                                                            w-full py-4 rounded-xl font-bold text-lg transition-all transform
-                                                            ${isCompleted 
+                                                        className={`w-full py-4 rounded-xl font-bold text-lg transition-all transform ${
+                                                            isCompleted 
                                                                 ? 'bg-green-100 text-green-700 cursor-not-allowed' 
-                                                                : `bg-gradient-to-r ${step.color} text-white hover:shadow-lg hover:scale-[1.02] active:scale-95`
-                                                            }
-                                                        `}
+                                                                : `bg-gradient-to-r ${step.color || 'from-gray-400 to-gray-600'} text-white hover:shadow-lg hover:scale-[1.02] active:scale-95`
+                                                        }`}
                                                     >
                                                         {isCompleted ? '✓ Step Completed' : 'Mark as Complete'}
                                                     </button>
@@ -432,60 +1051,101 @@
                             })}
                         </div>
 
-                        {/* Completion Message */}
-                        {completedSteps.length === journey.length && (
+                        {completedSteps.length === journey.steps.length && (
                             <div className="bg-gradient-to-r from-green-400 to-emerald-500 rounded-2xl shadow-2xl p-8 text-center text-white">
                                 <div className="text-6xl mb-4">🎉</div>
-                                <h2 className="text-4xl font-black mb-4">
-                                    Congratulations!
-                                </h2>
+                                <h2 className="text-4xl font-black mb-4">Congratulations!</h2>
                                 <p className="text-xl mb-6">
-                                    You've completed Sarah's entire patient journey and learned all the essential Accuro EMR workflows!
+                                    You've completed the {userProfile.specialty} training journey!
                                 </p>
-                                <button
-                                    onClick={resetJourney}
-                                    className="bg-white text-green-600 px-8 py-4 rounded-xl font-bold text-lg hover:bg-green-50 transition-colors shadow-lg"
-                                >
-                                    Practice Again
-                                </button>
+                                <div className="flex gap-4 justify-center">
+                                    <button
+                                        onClick={onBackToDashboard}
+                                        className="bg-white text-green-600 px-8 py-4 rounded-xl font-bold text-lg hover:bg-green-50 transition-colors shadow-lg"
+                                    >
+                                        Back to Dashboard
+                                    </button>
+                                    <button
+                                        onClick={resetJourney}
+                                        className="bg-green-600 text-white px-8 py-4 rounded-xl font-bold text-lg hover:bg-green-700 transition-colors shadow-lg"
+                                    >
+                                        Practice Again
+                                    </button>
+                                </div>
                             </div>
                         )}
-                    </div>
-
-                    {/* Footer Tips */}
-                    <div className="max-w-7xl mx-auto mt-8">
-                        <div className="bg-indigo-900 rounded-2xl shadow-xl p-6 text-white">
-                            <h3 className="text-xl font-bold mb-3 flex items-center gap-2">
-                                <span className="text-2xl">💡</span>
-                                Pro Tips for Success
-                            </h3>
-                            <ul className="space-y-2 text-indigo-100">
-                                <li className="flex items-start gap-2">
-                                    <span className="text-yellow-400 font-bold">→</span>
-                                    <span>Click each step to see detailed instructions and Accuro-specific navigation</span>
-                                </li>
-                                <li className="flex items-start gap-2">
-                                    <span className="text-yellow-400 font-bold">→</span>
-                                    <span>Practice each step in your Accuro training environment before marking complete</span>
-                                </li>
-                                <li className="flex items-start gap-2">
-                                    <span className="text-yellow-400 font-bold">→</span>
-                                    <span>Estimated times are guidelines - take the time you need to be accurate</span>
-                                </li>
-                                <li className="flex items-start gap-2">
-                                    <span className="text-yellow-400 font-bold">→</span>
-                                    <span>Bookmark this page and use it as a quick reference during your first weeks</span>
-                                </li>
-                            </ul>
-                        </div>
                     </div>
                 </div>
             );
         }
+        
+        // ============================================
+        // MAIN APP COMPONENT
+        // ============================================
+        function App() {
+            const [user, setUser] = useState(null);
+            const [userProfile, setUserProfile] = useState(null);
+            const [loading, setLoading] = useState(true);
+            const [currentView, setCurrentView] = useState('dashboard'); // 'dashboard' or 'journey'
 
-        // Render the app
+            useEffect(() => {
+                const { onAuthStateChanged } = window.firebaseModules;
+                
+                const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+                    if (firebaseUser) {
+                        setUser(firebaseUser);
+                        
+                        const { doc, getDoc } = window.firebaseModules;
+                        const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
+                        
+                        if (userDoc.exists()) {
+                            setUserProfile(userDoc.data());
+                        }
+                    } else {
+                        setUser(null);
+                        setUserProfile(null);
+                    }
+                    setLoading(false);
+                });
+
+                return () => unsubscribe();
+            }, []);
+
+            if (loading) {
+                return (
+                    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-indigo-500 to-purple-600">
+                        <div className="text-white text-2xl font-bold">Loading...</div>
+                    </div>
+                );
+            }
+
+            if (!user) {
+                return <LoginPage onLogin={() => {}} />;
+            }
+
+            if (!userProfile) {
+                return <SpecialtySelector user={user} onComplete={() => window.location.reload()} />;
+            }
+
+            // Students see dashboard first, then can navigate to journey
+            if (currentView === 'dashboard') {
+                return <StudentDashboard 
+                    user={user} 
+                    userProfile={userProfile} 
+                    onStartJourney={() => setCurrentView('journey')} 
+                />;
+            } else {
+                return <PatientJourney 
+                    user={user} 
+                    userProfile={userProfile}
+                    onBackToDashboard={() => setCurrentView('dashboard')} 
+                />;
+            }
+        }
+
+        // Render app
         const root = ReactDOM.createRoot(document.getElementById('root'));
-        root.render(<PatientJourneyVisual />);
+        root.render(<App />);
     </script>
 </body>
 </html>

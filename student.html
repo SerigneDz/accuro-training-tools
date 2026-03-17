@@ -723,7 +723,9 @@
                             const { setDoc, serverTimestamp } = window.firebaseModules;
                             setDoc(progressRef, {
                                 userId: user.uid,
+                                journeyId: journeyData.id,
                                 specialty: userProfile.specialty,
+                                totalSteps: journeyData.stepIds?.length || 0,  // Track total steps in journey
                                 startedAt: serverTimestamp(),
                                 completedStepIds: [],
                                 status: 'in_progress',

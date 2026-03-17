@@ -1941,20 +1941,22 @@
                     totalSteps += (journey.stepIds?.length || 0);
                 });
                 
-                const totalCompleted = progressSnapshot.docs.reduce((sum, doc) => {
-                    const data = doc.data();
-                    return sum + (data.completedStepIds?.length || 0);
-                }, 0);
-                
+                // Calculate true average completion percentage
                 const avgCompletion = progressSnapshot.docs.length > 0 
-                    ? Math.round((totalCompleted / progressSnapshot.docs.length) * 100) / 10
+                    ? progressSnapshot.docs.reduce((sum, doc) => {
+                        const data = doc.data();
+                        const completed = data.completedStepIds?.length || 0;
+                        const total = data.totalSteps || 1;  // Steps in their journey
+                        const percentage = (completed / total) * 100;
+                        return sum + percentage;
+                    }, 0) / progressSnapshot.docs.length
                     : 0;
                 
                 setStats({
                     totalUsers: usersSnapshot.size,
                     publishedJourneys: journeysSnapshot.size,
                     totalSteps: totalSteps,
-                    avgCompletion
+                    avgCompletion: Math.round(avgCompletion)  // Round to whole number
                 });
             };
             

@@ -400,7 +400,8 @@
                                                                     'pharmacist': 'Pharmacist',
                                                                     'lab_tech': 'Lab Tech'
                                                                 };
-                                                                return displayNames[s] || s.charAt(0).toUpperCase() + s.slice(1);
+                                                                // Handle string safely
+                                                                return displayNames[s] || (typeof s === 'string' ? s.charAt(0).toUpperCase() + s.slice(1) : s);
                                                             }).join(', ')}
                                                         </strong>
                                                     </>
@@ -859,29 +860,24 @@
                                         ) : (
                                             <div className="space-y-2">
                                                 {availableSpecialties.map((specialty) => {
-                                                    // Get display name
-                                                    const displayNames = {
-                                                        'nurse': 'Nurse',
-                                                        'moa': 'Medical Office Assistant',
-                                                        'dietician': 'Dietician',
-                                                        'physician': 'Physician',
-                                                        'pharmacist': 'Pharmacist',
-                                                        'lab_tech': 'Lab Technician'
-                                                    };
-                                                    const displayName = displayNames[specialty] || specialty.charAt(0).toUpperCase() + specialty.slice(1);
+                                                    // Handle both string format (fallback) and object format {id, name}
+                                                    const specialtyId = typeof specialty === 'string' ? specialty : specialty.id;
+                                                    const specialtyName = typeof specialty === 'string' 
+                                                        ? (specialty.charAt(0).toUpperCase() + specialty.slice(1))
+                                                        : specialty.name;
                                                     
                                                     return (
                                                         <label
-                                                            key={specialty}
+                                                            key={specialtyId}
                                                             className="flex items-center gap-3 p-2 hover:bg-blue-50 rounded-lg cursor-pointer transition"
                                                         >
                                                             <input
                                                                 type="checkbox"
-                                                                checked={formData.specialties?.includes(specialty) || false}
-                                                                onChange={() => toggleSpecialty(specialty)}
+                                                                checked={formData.specialties?.includes(specialtyId) || false}
+                                                                onChange={() => toggleSpecialty(specialtyId)}
                                                                 className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
                                                             />
-                                                            <span className="text-sm text-gray-700 font-medium">{displayName}</span>
+                                                            <span className="text-sm text-gray-700 font-medium">{specialtyName}</span>
                                                         </label>
                                                     );
                                                 })}

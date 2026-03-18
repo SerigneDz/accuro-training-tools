@@ -426,10 +426,14 @@
                             ...doc.data()
                         }));
                         
+                        console.log('Found journeys for', userProfile.specialty, ':', journeys.length);
+                        console.log('Journey titles:', journeys.map(j => j.title));
+                        
                         setAvailableJourneys(journeys);
                         
                         // If only one journey, auto-select it
                         if (journeys.length === 1) {
+                            console.log('Auto-selecting single journey:', journeys[0].title);
                             setJourney(journeys[0]);
                             
                             // Listen to progress for this journey
@@ -488,7 +492,10 @@
             
             if (!journey) {
                 // If there are multiple journeys, show selector
+                console.log('Journey is null, checking availableJourneys:', availableJourneys.length);
+                
                 if (availableJourneys.length > 1) {
+                    console.log('Showing journey selector for', availableJourneys.length, 'journeys');
                     return (
                         <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 p-4">
                             <div className="bg-white rounded-2xl shadow-xl p-8 max-w-2xl w-full">

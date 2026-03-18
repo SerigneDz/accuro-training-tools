@@ -399,12 +399,24 @@
                 try {
                     // Load journey for specialty
                     const journeysRef = collection(db, 'journeys');
-                    const q = query(
+                    
+                    // Try new format first (array-contains for specialties array)
+                    let q = query(
                         journeysRef,
-                        where('specialty', '==', userProfile.specialty),
+                        where('specialties', 'array-contains', userProfile.specialty),
                         where('status', '==', 'published')
                     );
-                    const querySnapshot = await getDocs(q);
+                    let querySnapshot = await getDocs(q);
+                    
+                    // Backward compatibility: If no results, try old format (single specialty field)
+                    if (querySnapshot.empty) {
+                        q = query(
+                            journeysRef,
+                            where('specialty', '==', userProfile.specialty),
+                            where('status', '==', 'published')
+                        );
+                        querySnapshot = await getDocs(q);
+                    }
                     
                     if (!querySnapshot.empty) {
                         const journeyDoc = querySnapshot.docs[0];
@@ -670,12 +682,24 @@
                 
                 try {
                     const journeysRef = collection(db, 'journeys');
-                    const q = query(
+                    
+                    // Try new format first (array-contains for specialties array)
+                    let q = query(
                         journeysRef,
-                        where('specialty', '==', userProfile.specialty),
+                        where('specialties', 'array-contains', userProfile.specialty),
                         where('status', '==', 'published')
                     );
-                    const querySnapshot = await getDocs(q);
+                    let querySnapshot = await getDocs(q);
+                    
+                    // Backward compatibility: If no results, try old format (single specialty field)
+                    if (querySnapshot.empty) {
+                        q = query(
+                            journeysRef,
+                            where('specialty', '==', userProfile.specialty),
+                            where('status', '==', 'published')
+                        );
+                        querySnapshot = await getDocs(q);
+                    }
                     
                     if (!querySnapshot.empty) {
                         const journeyDoc = querySnapshot.docs[0];

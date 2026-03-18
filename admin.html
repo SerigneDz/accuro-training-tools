@@ -257,6 +257,8 @@
                 const { doc, getDoc, setDoc, collection, getDocs } = window.firebaseModules;
                 
                 try {
+                    showToast('Cloning journey... Please wait.');
+                    
                     // Load all steps from source journey
                     const stepsPromises = (sourceJourney.stepIds || []).map(stepId => 
                         getDoc(doc(db, 'steps', stepId))
@@ -265,14 +267,20 @@
                     
                     // Clone steps and their tasks
                     const newStepIds = [];
+                    let cloneCounter = 0;
+                    
                     for (const stepDoc of stepsDocs) {
                         if (!stepDoc.exists()) continue;
                         
                         const stepData = stepDoc.data();
-                        const newStepId = 'step_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+                        // More unique ID with counter
+                        const newStepId = 'step_clone_' + Date.now() + '_' + cloneCounter + '_' + Math.random().toString(36).substr(2, 9);
+                        cloneCounter++;
                         
                         // Clone tasks for this step
                         const newTaskIds = [];
+                        let taskCounter = 0;
+                        
                         if (stepData.taskIds && stepData.taskIds.length > 0) {
                             const tasksPromises = stepData.taskIds.map(taskId => 
                                 getDoc(doc(db, 'tasks', taskId))
@@ -283,36 +291,48 @@
                                 if (!taskDoc.exists()) continue;
                                 
                                 const taskData = taskDoc.data();
-                                const newTaskId = 'task_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+                                // More unique ID with counter
+                                const newTaskId = 'task_clone_' + Date.now() + '_' + taskCounter + '_' + Math.random().toString(36).substr(2, 9);
+                                taskCounter++;
                                 
-                                await setDoc(doc(db, 'tasks', newTaskId), taskData);
+                                // Deep copy task data to ensure no references
+                                await setDoc(doc(db, 'tasks', newTaskId), {
+                                    action: taskData.action || '',
+                                    accuroNavigation: taskData.accuroNavigation || '',
+                                    estimatedTime: taskData.estimatedTime || '',
+                                    order: taskData.order || 0,
+                                    screenshotUrl: taskData.screenshotUrl || ''
+                                });
+                                
                                 newTaskIds.push(newTaskId);
                                 
-                                // Small delay to ensure unique IDs
-                                await new Promise(resolve => setTimeout(resolve, 10));
+                                // Small delay to ensure unique timestamps
+                                await new Promise(resolve => setTimeout(resolve, 15));
                             }
                         }
                         
-                        // Create new step with cloned tasks
+                        // Deep copy step data to ensure no references
                         await setDoc(doc(db, 'steps', newStepId), {
-                            ...stepData,
+                            name: stepData.name || '',
+                            description: stepData.description || '',
+                            order: stepData.order || 0,
                             taskIds: newTaskIds
                         });
                         
                         newStepIds.push(newStepId);
                         
-                        // Small delay to ensure unique IDs
-                        await new Promise(resolve => setTimeout(resolve, 10));
+                        // Small delay to ensure unique timestamps
+                        await new Promise(resolve => setTimeout(resolve, 15));
                     }
                     
                     // Create cloned journey
-                    const newJourneyId = 'journey_' + Date.now();
+                    const newJourneyId = 'journey_clone_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
                     const { serverTimestamp } = window.firebaseModules;
                     
                     await setDoc(doc(db, 'journeys', newJourneyId), {
                         title: sourceJourney.title + ' (Copy)',
                         description: sourceJourney.description,
-                        specialty: sourceJourney.specialty,
+                        specialties: sourceJourney.specialties || (sourceJourney.specialty ? [sourceJourney.specialty] : []),  // Handle both old and new format
                         status: 'draft',  // Clone as draft
                         stepIds: newStepIds,
                         attachments: sourceJourney.attachments || [],
@@ -367,7 +387,28 @@
                                         </div>
                                         <p className="text-gray-600 mb-3">{journey.description}</p>
                                         <div className="flex gap-4 text-sm text-gray-500">
-                                            <span>🎯 Specialty: <strong>{journey.specialty}</strong></span>
+                                            <span>
+                                                👥 {journey.specialties?.length > 0 ? (
+                                                    <>
+                                                        <strong>
+                                                            {journey.specialties.map(s => {
+                                                                const displayNames = {
+                                                                    'nurse': 'Nurse',
+                                                                    'moa': 'MOA',
+                                                                    'dietician': 'Dietician',
+                                                                    'physician': 'Physician',
+                                                                    'pharmacist': 'Pharmacist',
+                                                                    'lab_tech': 'Lab Tech'
+                                                                };
+                                                                return displayNames[s] || s.charAt(0).toUpperCase() + s.slice(1);
+                                                            }).join(', ')}
+                                                        </strong>
+                                                    </>
+                                                ) : (
+                                                    // Backward compatibility: show old 'specialty' field
+                                                    <strong>{journey.specialty || 'Not assigned'}</strong>
+                                                )}
+                                            </span>
                                             <span>📚 Steps: <strong>{journey.stepIds?.length || 0}</strong></span>
                                         </div>
                                     </div>
@@ -421,18 +462,75 @@
         // JOURNEY EDITOR (with drag-drop steps)
         // ============================================
         function JourneyEditor({ journey, onClose, showToast }) {
-            const [formData, setFormData] = useState(journey);
+            // Handle backward compatibility: convert old 'specialty' to new 'specialties' array
+            const initialFormData = {
+                ...journey,
+                specialties: journey.specialties || (journey.specialty ? [journey.specialty] : [])
+            };
+            
+            const [formData, setFormData] = useState(initialFormData);
             const [steps, setSteps] = useState([]);
             const [loading, setLoading] = useState(true);
             const [saving, setSaving] = useState(false);
             const [attachments, setAttachments] = useState(journey.attachments || []);
             const [newAttachment, setNewAttachment] = useState({ name: '', url: '' });
             const [editingStep, setEditingStep] = useState(null);
+            const [availableSpecialties, setAvailableSpecialties] = useState([]);
             const stepsListRef = useRef(null);
             
             useEffect(() => {
+                loadSpecialties();
                 loadSteps();
             }, []);
+            
+            const loadSpecialties = async () => {
+                const { doc, getDoc } = window.firebaseModules;
+                try {
+                    const specialtiesDoc = await getDoc(doc(db, 'settings', 'specialties'));
+                    if (specialtiesDoc.exists()) {
+                        const data = specialtiesDoc.data();
+                        setAvailableSpecialties(data.list || []);
+                    } else {
+                        // Fallback to default specialties if settings not found
+                        setAvailableSpecialties([
+                            'nurse',
+                            'moa',
+                            'dietician',
+                            'physician',
+                            'pharmacist',
+                            'lab_tech'
+                        ]);
+                    }
+                } catch (error) {
+                    console.error('Error loading specialties:', error);
+                    // Fallback to defaults
+                    setAvailableSpecialties([
+                        'nurse',
+                        'moa',
+                        'dietician',
+                        'physician',
+                        'pharmacist',
+                        'lab_tech'
+                    ]);
+                }
+            };
+            
+            const toggleSpecialty = (specialty) => {
+                const currentSpecialties = formData.specialties || [];
+                if (currentSpecialties.includes(specialty)) {
+                    // Remove specialty
+                    setFormData({
+                        ...formData,
+                        specialties: currentSpecialties.filter(s => s !== specialty)
+                    });
+                } else {
+                    // Add specialty
+                    setFormData({
+                        ...formData,
+                        specialties: [...currentSpecialties, specialty]
+                    });
+                }
+            };
             
             useEffect(() => {
                 if (stepsListRef.current && steps.length > 0) {
@@ -475,11 +573,18 @@
     		if (saving) return; // Prevent double-save
     		setSaving(true);
     		
+    		// Validation: At least one specialty must be selected
+    		if (!formData.specialties || formData.specialties.length === 0) {
+    		    showToast('Please select at least one specialty', 'error');
+    		    setSaving(false);
+    		    return;
+    		}
+    		
     		const { doc, setDoc, updateDoc, serverTimestamp } = window.firebaseModules;
     
     		try {
         		const journeyData = {
-            		specialty: formData.specialty,
+            		specialties: formData.specialties,  // Save as array
             		title: formData.title,
             		description: formData.description,
             		status: formData.status,
@@ -731,19 +836,50 @@
                             
                             <div className="grid md:grid-cols-2 gap-4">
                                 <div>
-                                    <label className="block text-sm font-semibold text-gray-700 mb-2">Specialty</label>
-                                    <select
-                                        value={formData.specialty}
-                                        onChange={(e) => setFormData({ ...formData, specialty: e.target.value })}
-                                        className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:border-blue-500 focus:outline-none"
-                                    >
-                                        <option value="nurse">Nurse</option>
-                                        <option value="moa">Medical Office Assistant</option>
-                                        <option value="dietician">Dietician</option>
-                                        <option value="physician">Physician</option>
-                                        <option value="pharmacist">Pharmacist</option>
-                                        <option value="lab_tech">Lab Technician</option>
-                                    </select>
+                                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                                        Assign to Specialties
+                                        <span className="text-xs text-gray-500 font-normal ml-2">(Select one or more)</span>
+                                    </label>
+                                    <div className="border-2 border-gray-200 rounded-lg p-4 bg-gray-50 max-h-60 overflow-y-auto">
+                                        {availableSpecialties.length === 0 ? (
+                                            <div className="text-gray-400 text-sm">Loading specialties...</div>
+                                        ) : (
+                                            <div className="space-y-2">
+                                                {availableSpecialties.map((specialty) => {
+                                                    // Get display name
+                                                    const displayNames = {
+                                                        'nurse': 'Nurse',
+                                                        'moa': 'Medical Office Assistant',
+                                                        'dietician': 'Dietician',
+                                                        'physician': 'Physician',
+                                                        'pharmacist': 'Pharmacist',
+                                                        'lab_tech': 'Lab Technician'
+                                                    };
+                                                    const displayName = displayNames[specialty] || specialty.charAt(0).toUpperCase() + specialty.slice(1);
+                                                    
+                                                    return (
+                                                        <label
+                                                            key={specialty}
+                                                            className="flex items-center gap-3 p-2 hover:bg-blue-50 rounded-lg cursor-pointer transition"
+                                                        >
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={formData.specialties?.includes(specialty) || false}
+                                                                onChange={() => toggleSpecialty(specialty)}
+                                                                className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                                                            />
+                                                            <span className="text-sm text-gray-700 font-medium">{displayName}</span>
+                                                        </label>
+                                                    );
+                                                })}
+                                            </div>
+                                        )}
+                                    </div>
+                                    {formData.specialties?.length > 0 && (
+                                        <div className="mt-2 text-xs text-gray-600">
+                                            ✓ Selected: {formData.specialties.length} {formData.specialties.length === 1 ? 'specialty' : 'specialties'}
+                                        </div>
+                                    )}
                                 </div>
                                 
                                 <div>

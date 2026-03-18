@@ -694,6 +694,19 @@
                 return <StepEditor step={editingStep} onSave={addStepToJourney} onClose={() => setEditingStep(null)} showToast={showToast} />;
             }
             
+            if (loading) {
+                return (
+                    <div className="p-8 max-w-5xl mx-auto">
+                        <div className="flex items-center justify-center min-h-[400px]">
+                            <div className="text-center">
+                                <div className="text-6xl mb-4">⏳</div>
+                                <div className="text-xl font-semibold text-gray-600">Loading journey...</div>
+                            </div>
+                        </div>
+                    </div>
+                );
+            }
+            
             return (
                 <div className="p-8 max-w-5xl mx-auto">
                     <div className="flex justify-between items-center mb-8">

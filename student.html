@@ -387,6 +387,7 @@
         function StudentDashboard({ user, userProfile, onStartJourney }) {
             const [progress, setProgress] = useState(null);
             const [journey, setJourney] = useState(null);
+            const [availableJourneys, setAvailableJourneys] = useState([]);
             const [loading, setLoading] = useState(true);
             
             useEffect(() => {
@@ -397,7 +398,7 @@
                 const { collection, query, where, getDocs, doc, getDoc, onSnapshot } = window.firebaseModules;
                 
                 try {
-                    // Load journey for specialty
+                    // Load all journeys for specialty
                     const journeysRef = collection(db, 'journeys');
                     
                     // Try new format first (array-contains for specialties array)
@@ -419,30 +420,42 @@
                     }
                     
                     if (!querySnapshot.empty) {
-                        const journeyDoc = querySnapshot.docs[0];
-                        const journeyData = { id: journeyDoc.id, ...journeyDoc.data() };
-                        setJourney(journeyData);
+                        // Get all available journeys
+                        const journeys = querySnapshot.docs.map(doc => ({
+                            id: doc.id,
+                            ...doc.data()
+                        }));
                         
-                        // Listen to progress
-                        const progressId = `${user.uid}_${userProfile.specialty}`;
-                        const progressRef = doc(db, 'userProgress', progressId);
+                        setAvailableJourneys(journeys);
                         
-                        onSnapshot(progressRef, (doc) => {
-                            if (doc.exists()) {
-                                setProgress(doc.data());
-                            } else {
-                                // Initialize progress
-                                const { setDoc, serverTimestamp } = window.firebaseModules;
-                                setDoc(progressRef, {
-                                    userId: user.uid,
-                                    specialty: userProfile.specialty,
-                                    startedAt: serverTimestamp(),
-                                    completedStepIds: [],
-                                    status: 'in_progress',
-                                    currentStepIndex: 0
-                                });
-                            }
-                        });
+                        // If only one journey, auto-select it
+                        if (journeys.length === 1) {
+                            setJourney(journeys[0]);
+                            
+                            // Listen to progress for this journey
+                            const progressId = `${user.uid}_${userProfile.specialty}`;
+                            const progressRef = doc(db, 'userProgress', progressId);
+                            
+                            onSnapshot(progressRef, (doc) => {
+                                if (doc.exists()) {
+                                    setProgress(doc.data());
+                                } else {
+                                    // Initialize progress
+                                    const { setDoc, serverTimestamp } = window.firebaseModules;
+                                    setDoc(progressRef, {
+                                        userId: user.uid,
+                                        journeyId: journeys[0].id,
+                                        specialty: userProfile.specialty,
+                                        totalSteps: journeys[0].stepIds?.length || 0,
+                                        startedAt: serverTimestamp(),
+                                        completedStepIds: [],
+                                        status: 'in_progress',
+                                        currentStepIndex: 0
+                                    });
+                                }
+                            });
+                        }
+                        // If multiple journeys, let user select (journey stays null, shows selector)
                     }
                     
                     setLoading(false);
@@ -474,6 +487,78 @@
             }
             
             if (!journey) {
+                // If there are multiple journeys, show selector
+                if (availableJourneys.length > 1) {
+                    return (
+                        <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 p-4">
+                            <div className="bg-white rounded-2xl shadow-xl p-8 max-w-2xl w-full">
+                                <div className="text-center mb-8">
+                                    <div className="text-6xl mb-4">🎓</div>
+                                    <h2 className="text-3xl font-bold text-gray-800 mb-2">Choose Your Training Journey</h2>
+                                    <p className="text-lg text-gray-600">
+                                        {userProfile.displayName} • {userProfile.specialty.toUpperCase()}
+                                    </p>
+                                    <p className="text-sm text-gray-500 mt-2">
+                                        You have {availableJourneys.length} training journeys available
+                                    </p>
+                                </div>
+                                
+                                <div className="space-y-4">
+                                    {availableJourneys.map((j) => (
+                                        <div
+                                            key={j.id}
+                                            onClick={() => {
+                                                setJourney(j);
+                                                // Initialize progress for selected journey
+                                                const { doc, setDoc, serverTimestamp, onSnapshot } = window.firebaseModules;
+                                                const progressId = `${user.uid}_${j.id}`;
+                                                const progressRef = doc(db, 'userProgress', progressId);
+                                                
+                                                onSnapshot(progressRef, (docSnap) => {
+                                                    if (docSnap.exists()) {
+                                                        setProgress(docSnap.data());
+                                                    } else {
+                                                        setDoc(progressRef, {
+                                                            userId: user.uid,
+                                                            journeyId: j.id,
+                                                            specialty: userProfile.specialty,
+                                                            totalSteps: j.stepIds?.length || 0,
+                                                            startedAt: serverTimestamp(),
+                                                            completedStepIds: [],
+                                                            status: 'in_progress',
+                                                            currentStepIndex: 0
+                                                        });
+                                                    }
+                                                });
+                                            }}
+                                            className="border-2 border-gray-200 rounded-xl p-6 hover:border-indigo-500 hover:bg-indigo-50 cursor-pointer transition group"
+                                        >
+                                            <h3 className="text-xl font-bold text-gray-800 group-hover:text-indigo-600 mb-2">
+                                                {j.title}
+                                            </h3>
+                                            <p className="text-gray-600 mb-3">{j.description}</p>
+                                            <div className="flex gap-4 text-sm text-gray-500">
+                                                <span>📚 {j.stepIds?.length || 0} steps</span>
+                                                {j.attachments?.length > 0 && (
+                                                    <span>📎 {j.attachments.length} resources</span>
+                                                )}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                                
+                                <button
+                                    onClick={handleSignOut}
+                                    className="mt-6 w-full px-6 py-3 bg-gray-200 hover:bg-gray-300 text-gray-700 font-semibold rounded-lg transition"
+                                >
+                                    Sign Out
+                                </button>
+                            </div>
+                        </div>
+                    );
+                }
+                
+                // No journeys available
                 return (
                     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 p-4">
                         <div className="bg-white rounded-2xl shadow-xl p-8 max-w-lg text-center">

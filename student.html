@@ -405,11 +405,59 @@
                 setSelectedProgress(progress);
             }, [progress]);
             
+            // Cleanup old progress documents when journey is selected
+            const cleanupOldProgress = async (userId, specialty, currentJourneyId) => {
+                const { collection, query, where, getDocs, doc, deleteDoc } = window.firebaseModules;
+                
+                try {
+                    console.log('Cleaning up old progress documents...');
+                    
+                    // Find all progress docs for this user
+                    const progressRef = collection(db, 'userProgress');
+                    const allDocs = await getDocs(progressRef);
+                    
+                    const toDelete = [];
+                    allDocs.forEach(docSnap => {
+                        const docId = docSnap.id;
+                        
+                        // Old format: userId_specialty
+                        if (docId === `${userId}_${specialty}`) {
+                            console.log('Found old format progress:', docId);
+                            toDelete.push(docId);
+                        }
+                        
+                        // Duplicate journey progress (same user, different journey than current)
+                        // Keep only the current journey's progress
+                        const data = docSnap.data();
+                        if (docId.startsWith(userId) && 
+                            data.journeyId && 
+                            data.journeyId !== currentJourneyId &&
+                            data.specialty === specialty) {
+                            console.log('Found duplicate journey progress:', docId);
+                            // Don't delete other journey progress - user might switch back!
+                            // Only delete if it's for same specialty but orphaned
+                        }
+                    });
+                    
+                    // Delete old format docs
+                    for (const docId of toDelete) {
+                        await deleteDoc(doc(db, 'userProgress', docId));
+                        console.log('Deleted old progress:', docId);
+                    }
+                    
+                    console.log('Cleanup complete');
+                } catch (err) {
+                    console.error('Error during cleanup:', err);
+                }
+            };
+            
             useEffect(() => {
                 // Only load if we don't already have a journey
                 if (!journey) {
                     loadDashboardData();
                 } else {
+                    // Clean up old progress when we have a journey
+                    cleanupOldProgress(user.uid, userProfile.specialty, journey.id);
                     setLoading(false);
                 }
             }, []);
@@ -670,6 +718,15 @@
             const completedSteps = progress?.completedStepIds?.length || 0;
             const totalSteps = journey.stepIds?.length || 0;
             const daysActive = progress?.startedAt ? Math.floor((Date.now() - progress.startedAt.toDate()) / (1000 * 60 * 60 * 24)) : 0;
+            
+            console.log('Dashboard render:', {
+                progressPercent,
+                completedSteps,
+                totalSteps,
+                availableJourneysCount: availableJourneys.length,
+                currentJourneyId: journey?.id,
+                progressData: progress
+            });
             
             return (
                 <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
@@ -1020,6 +1077,13 @@
                 
                 // Use journeyId for progress tracking
                 const progressId = `${user.uid}_${journey.id}`;
+                console.log('Marking step complete:', {
+                    stepId,
+                    progressId,
+                    journeyId: journey.id,
+                    userId: user.uid
+                });
+                
                 const progressRef = doc(db, 'userProgress', progressId);
                 
                 try {
@@ -1028,6 +1092,8 @@
                         currentStepIndex: index + 1,
                         lastUpdated: serverTimestamp()
                     });
+                    
+                    console.log('Step marked complete successfully');
                     
                     if (index < journey.steps.length - 1) {
                         setActiveStep(index + 1);

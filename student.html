@@ -384,14 +384,34 @@
         // ============================================
         // STUDENT DASHBOARD (NEW!)
         // ============================================
-        function StudentDashboard({ user, userProfile, onStartJourney }) {
-            const [progress, setProgress] = useState(null);
-            const [journey, setJourney] = useState(null);
+        function StudentDashboard({ user, userProfile, selectedJourney, setSelectedJourney, selectedProgress, setSelectedProgress, onStartJourney }) {
+            const [progress, setProgress] = useState(selectedProgress); // Use prop as initial value
+            const [journey, setJourney] = useState(selectedJourney); // Use prop as initial value
             const [availableJourneys, setAvailableJourneys] = useState([]);
             const [loading, setLoading] = useState(true);
             
+            // Sync local state with lifted state
             useEffect(() => {
-                loadDashboardData();
+                setJourney(selectedJourney);
+                setProgress(selectedProgress);
+            }, [selectedJourney, selectedProgress]);
+            
+            // Update lifted state when local changes
+            useEffect(() => {
+                setSelectedJourney(journey);
+            }, [journey]);
+            
+            useEffect(() => {
+                setSelectedProgress(progress);
+            }, [progress]);
+            
+            useEffect(() => {
+                // Only load if we don't already have a journey
+                if (!journey) {
+                    loadDashboardData();
+                } else {
+                    setLoading(false);
+                }
             }, []);
             
             const loadDashboardData = async () => {
@@ -401,33 +421,62 @@
                     // Load all journeys for specialty
                     const journeysRef = collection(db, 'journeys');
                     
-                    // Try new format first (array-contains for specialties array)
-                    let q = query(
+                    // Query for new format (array-contains for specialties array)
+                    const qNew = query(
                         journeysRef,
                         where('specialties', 'array-contains', userProfile.specialty),
                         where('status', '==', 'published')
                     );
-                    let querySnapshot = await getDocs(q);
+                    const newFormatResults = await getDocs(qNew);
                     
-                    // Backward compatibility: If no results, try old format (single specialty field)
-                    if (querySnapshot.empty) {
-                        q = query(
-                            journeysRef,
-                            where('specialty', '==', userProfile.specialty),
-                            where('status', '==', 'published')
-                        );
-                        querySnapshot = await getDocs(q);
-                    }
+                    // Query for old format (single specialty field)
+                    const qOld = query(
+                        journeysRef,
+                        where('specialty', '==', userProfile.specialty),
+                        where('status', '==', 'published')
+                    );
+                    const oldFormatResults = await getDocs(qOld);
                     
-                    if (!querySnapshot.empty) {
-                        // Get all available journeys
-                        const journeys = querySnapshot.docs.map(doc => ({
-                            id: doc.id,
-                            ...doc.data()
-                        }));
+                    // Combine both results (deduplicate by ID)
+                    const journeyMap = new Map();
+                    
+                    newFormatResults.docs.forEach(doc => {
+                        journeyMap.set(doc.id, { id: doc.id, ...doc.data() });
+                    });
+                    
+                    oldFormatResults.docs.forEach(doc => {
+                        if (!journeyMap.has(doc.id)) {
+                            journeyMap.set(doc.id, { id: doc.id, ...doc.data() });
+                        }
+                    });
+                    
+                    const allJourneys = Array.from(journeyMap.values());
+                    
+                    if (allJourneys.length > 0) {
+                        // Auto-migrate old format: specialty (string) -> specialties (array) for display
+                        let journeys = allJourneys.map(j => {
+                            if (j.specialty && !j.specialties) {
+                                console.log('Auto-migrating journey:', j.title);
+                                return {
+                                    ...j,
+                                    specialties: [j.specialty]
+                                };
+                            }
+                            return j;
+                        });
                         
-                        console.log('Found journeys for', userProfile.specialty, ':', journeys.length);
-                        console.log('Journey titles:', journeys.map(j => j.title));
+                        console.log('=== JOURNEY DEBUG INFO ===');
+                        console.log('User specialty:', userProfile.specialty);
+                        console.log('Found journeys:', journeys.length);
+                        journeys.forEach((j, index) => {
+                            console.log(`Journey ${index + 1}:`, {
+                                title: j.title,
+                                specialties: j.specialties,
+                                specialty: j.specialty,
+                                status: j.status
+                            });
+                        });
+                        console.log('========================');
                         
                         setAvailableJourneys(journeys);
                         
@@ -437,7 +486,7 @@
                             setJourney(journeys[0]);
                             
                             // Listen to progress for this journey
-                            const progressId = `${user.uid}_${userProfile.specialty}`;
+                            const progressId = `${user.uid}_${journeys[0].id}`;
                             const progressRef = doc(db, 'userProgress', progressId);
                             
                             onSnapshot(progressRef, (doc) => {
@@ -632,13 +681,31 @@
                                     <h1 className="text-2xl font-bold text-gray-800">Accuro Training</h1>
                                     <p className="text-sm text-gray-600">{userProfile.displayName} • {userProfile.specialty}</p>
                                 </div>
-                                <button
-                                    onClick={handleSignOut}
-                                    className="flex items-center gap-2 px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition"
-                                >
-                                    <LogOut className="w-4 h-4" />
-                                    Sign Out
-                                </button>
+                                <div className="flex items-center gap-2">
+                                    {/* Show Change Journey button if multiple journeys available */}
+                                    {availableJourneys.length > 1 && (
+                                        <button
+                                            onClick={() => {
+                                                setJourney(null);
+                                                setProgress(null);
+                                            }}
+                                            className="flex items-center gap-2 px-4 py-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition font-semibold"
+                                            title="Switch to a different training journey"
+                                        >
+                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                                            </svg>
+                                            Change Journey
+                                        </button>
+                                    )}
+                                    <button
+                                        onClick={handleSignOut}
+                                        className="flex items-center gap-2 px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition"
+                                    >
+                                        <LogOut className="w-4 h-4" />
+                                        Sign Out
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -676,7 +743,23 @@
                                     <div className="text-3xl">🗺️</div>
                                 </div>
                                 <div className="text-xl font-bold text-gray-800 mb-2">{journey.title}</div>
-                                <div className="text-sm text-gray-600">{userProfile.specialty} training</div>
+                                <div className="text-sm text-gray-600 mb-3">{userProfile.specialty} training</div>
+                                
+                                {/* Show change link if multiple journeys */}
+                                {availableJourneys.length > 1 && (
+                                    <button
+                                        onClick={() => {
+                                            setJourney(null);
+                                            setProgress(null);
+                                        }}
+                                        className="text-xs text-indigo-600 hover:text-indigo-800 font-semibold flex items-center gap-1"
+                                    >
+                                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                                        </svg>
+                                        Switch to different journey
+                                    </button>
+                                )}
                             </div>
                             
                             <div className="bg-white rounded-xl shadow-lg p-6 border-l-4 border-purple-500">
@@ -757,8 +840,8 @@
         // ============================================
         // PATIENT JOURNEY COMPONENT (Same as before, but accessed from dashboard)
         // ============================================
-        function PatientJourney({ user, userProfile, onBackToDashboard }) {
-            const [journey, setJourney] = useState(null);
+        function PatientJourney({ user, userProfile, selectedJourney, onBackToDashboard }) {
+            const [journey, setJourney] = useState(selectedJourney); // Use passed journey
             const [loading, setLoading] = useState(true);
             const [activeStep, setActiveStep] = useState(0);
             const [showDetails, setShowDetails] = useState(null);
@@ -766,8 +849,76 @@
             const [progress, setProgress] = useState(null);
 
             useEffect(() => {
-                loadJourneyAndProgress();
+                // If we have a selected journey, use it; otherwise load
+                if (selectedJourney) {
+                    loadJourneyDetails(selectedJourney);
+                } else {
+                    loadJourneyAndProgress();
+                }
             }, [userProfile.specialty]);
+            
+            const loadJourneyDetails = async (journeyData) => {
+                const { doc, getDoc, onSnapshot } = window.firebaseModules;
+                
+                try {
+                    // Load steps and tasks for the journey
+                    const stepsPromises = journeyData.stepIds.map(stepId =>
+                        getDoc(doc(db, 'steps', stepId))
+                    );
+                    const stepsDocs = await Promise.all(stepsPromises);
+                    const steps = stepsDocs
+                        .filter(doc => doc.exists())
+                        .map(doc => ({ id: doc.id, ...doc.data() }));
+                    
+                    for (let step of steps) {
+                        if (step.taskIds && step.taskIds.length > 0) {
+                            const tasksPromises = step.taskIds.map(taskId =>
+                                getDoc(doc(db, 'tasks', taskId))
+                            );
+                            const tasksDocs = await Promise.all(tasksPromises);
+                            step.tasks = tasksDocs
+                                .filter(doc => doc.exists())
+                                .map(doc => ({ id: doc.id, ...doc.data() }))
+                                .sort((a, b) => a.order - b.order);
+                        } else {
+                            step.tasks = [];
+                        }
+                    }
+                    
+                    steps.sort((a, b) => a.order - b.order);
+                    journeyData.steps = steps;
+                    setJourney(journeyData);
+                    
+                    // Use journeyId for progress tracking
+                    const progressId = `${user.uid}_${journeyData.id}`;
+                    const progressRef = doc(db, 'userProgress', progressId);
+                    
+                    const unsubscribe = onSnapshot(progressRef, (doc) => {
+                        if (doc.exists()) {
+                            const data = doc.data();
+                            setProgress(data);
+                            setCompletedSteps(data.completedStepIds || []);
+                        } else {
+                            const { setDoc, serverTimestamp } = window.firebaseModules;
+                            setDoc(progressRef, {
+                                userId: user.uid,
+                                journeyId: journeyData.id,
+                                specialty: userProfile.specialty,
+                                totalSteps: journeyData.stepIds?.length || 0,
+                                startedAt: serverTimestamp(),
+                                completedStepIds: [],
+                                status: 'in_progress',
+                                currentStepIndex: 0
+                            });
+                        }
+                    });
+                    
+                    setLoading(false);
+                } catch (err) {
+                    console.error('Error loading journey details:', err);
+                    setLoading(false);
+                }
+            };
 
             const loadJourneyAndProgress = async () => {
                 const { collection, query, where, getDocs, doc, getDoc, onSnapshot } = window.firebaseModules;
@@ -867,7 +1018,8 @@
             const markComplete = async (stepId, index) => {
                 const { doc, updateDoc, arrayUnion, serverTimestamp } = window.firebaseModules;
                 
-                const progressId = `${user.uid}_${userProfile.specialty}`;
+                // Use journeyId for progress tracking
+                const progressId = `${user.uid}_${journey.id}`;
                 const progressRef = doc(db, 'userProgress', progressId);
                 
                 try {
@@ -890,7 +1042,8 @@
                 if (!confirm('Are you sure you want to reset your progress?')) return;
                 
                 const { doc, updateDoc } = window.firebaseModules;
-                const progressId = `${user.uid}_${userProfile.specialty}`;
+                // Use journeyId for progress tracking
+                const progressId = `${user.uid}_${journey.id}`;
                 const progressRef = doc(db, 'userProgress', progressId);
                 
                 try {
@@ -1205,6 +1358,8 @@
             const [userProfile, setUserProfile] = useState(null);
             const [loading, setLoading] = useState(true);
             const [currentView, setCurrentView] = useState('dashboard'); // 'dashboard' or 'journey'
+            const [selectedJourney, setSelectedJourney] = useState(null); // Lift journey state here
+            const [selectedProgress, setSelectedProgress] = useState(null); // Lift progress state here
 
             useEffect(() => {
                 const { onAuthStateChanged } = window.firebaseModules;
@@ -1222,6 +1377,8 @@
                     } else {
                         setUser(null);
                         setUserProfile(null);
+                        setSelectedJourney(null); // Reset on logout
+                        setSelectedProgress(null);
                     }
                     setLoading(false);
                 });
@@ -1249,13 +1406,18 @@
             if (currentView === 'dashboard') {
                 return <StudentDashboard 
                     user={user} 
-                    userProfile={userProfile} 
+                    userProfile={userProfile}
+                    selectedJourney={selectedJourney}
+                    setSelectedJourney={setSelectedJourney}
+                    selectedProgress={selectedProgress}
+                    setSelectedProgress={setSelectedProgress}
                     onStartJourney={() => setCurrentView('journey')} 
                 />;
             } else {
                 return <PatientJourney 
                     user={user} 
                     userProfile={userProfile}
+                    selectedJourney={selectedJourney}
                     onBackToDashboard={() => setCurrentView('dashboard')} 
                 />;
             }

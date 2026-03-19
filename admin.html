@@ -1880,26 +1880,77 @@
             }, []);
             
             const loadAnalytics = async () => {
-                const { collection, getDocs } = window.firebaseModules;
+                const { collection, getDocs, query, where } = window.firebaseModules;
                 
-                // Load all progress records
-                const progressSnapshot = await getDocs(collection(db, 'userProgress'));
-                const allProgress = progressSnapshot.docs.map(doc => doc.data());
-                
-                // Calculate metrics
-                const totalUsers = new Set(allProgress.map(p => p.userId)).size;
-                const completedJourneys = allProgress.filter(p => p.status === 'completed').length;
-                const avgCompletion = allProgress.length > 0 
-                    ? Math.round((allProgress.reduce((sum, p) => sum + (p.completedStepIds?.length || 0), 0) / allProgress.length) * 100) / 100
-                    : 0;
-                
-                setAnalytics({
-                    totalUsers,
-                    completedJourneys,
-                    avgCompletion,
-                    inProgressJourneys: allProgress.filter(p => p.status === 'in_progress').length
-                });
-                setLoading(false);
+                try {
+                    // Load all progress records
+                    const progressSnapshot = await getDocs(collection(db, 'userProgress'));
+                    const allProgress = progressSnapshot.docs.map(doc => ({
+                        id: doc.id,
+                        ...doc.data()
+                    }));
+                    
+                    console.log('Analytics - Total progress docs:', allProgress.length);
+                    
+                    // Load published journeys to get total steps
+                    const journeysSnapshot = await getDocs(
+                        query(collection(db, 'journeys'), where('status', '==', 'published'))
+                    );
+                    const publishedJourneys = journeysSnapshot.docs.map(doc => ({
+                        id: doc.id,
+                        ...doc.data()
+                    }));
+                    
+                    // Calculate total steps across all published journeys
+                    const totalSteps = publishedJourneys.reduce((sum, j) => sum + (j.stepIds?.length || 0), 0);
+                    
+                    // Calculate metrics
+                    const totalUsers = new Set(allProgress.map(p => p.userId)).size;
+                    
+                    // Count completed journeys (100% completion)
+                    const completedJourneys = allProgress.filter(p => {
+                        const completed = p.completedStepIds?.length || 0;
+                        const total = p.totalSteps || 0;
+                        return total > 0 && completed >= total;
+                    }).length;
+                    
+                    // Calculate average completion percentage across all users
+                    let avgCompletionPercent = 0;
+                    if (allProgress.length > 0) {
+                        const totalPercentage = allProgress.reduce((sum, p) => {
+                            const completed = p.completedStepIds?.length || 0;
+                            const total = p.totalSteps || 0;
+                            const percentage = total > 0 ? (completed / total * 100) : 0;
+                            return sum + percentage;
+                        }, 0);
+                        avgCompletionPercent = totalPercentage / allProgress.length;
+                    }
+                    
+                    console.log('Analytics calculated:', {
+                        totalUsers,
+                        completedJourneys,
+                        avgCompletionPercent,
+                        totalSteps,
+                        publishedJourneys: publishedJourneys.length
+                    });
+                    
+                    setAnalytics({
+                        totalUsers,
+                        completedJourneys,
+                        avgCompletionPercent,
+                        inProgressJourneys: allProgress.filter(p => {
+                            const completed = p.completedStepIds?.length || 0;
+                            const total = p.totalSteps || 0;
+                            return total > 0 && completed < total;
+                        }).length,
+                        totalSteps,
+                        publishedJourneys: publishedJourneys.length
+                    });
+                    setLoading(false);
+                } catch (error) {
+                    console.error('Error loading analytics:', error);
+                    setLoading(false);
+                }
             };
             
             if (loading) return <div className="p-8">Loading analytics...</div>;
@@ -1915,10 +1966,16 @@
                             <div className="text-xs text-gray-500 mt-2">Total users in system</div>
                         </div>
                         
+                        <div className="bg-white rounded-xl shadow-lg p-6 border-l-4 border-indigo-500">
+                            <div className="text-sm text-gray-600 mb-1">Published Journeys</div>
+                            <div className="text-3xl font-bold text-gray-800">{analytics.publishedJourneys}</div>
+                            <div className="text-xs text-gray-500 mt-2">Active training content</div>
+                        </div>
+                        
                         <div className="bg-white rounded-xl shadow-lg p-6 border-l-4 border-green-500">
                             <div className="text-sm text-gray-600 mb-1">Completed Journeys</div>
                             <div className="text-3xl font-bold text-gray-800">{analytics.completedJourneys}</div>
-                            <div className="text-xs text-green-600 mt-2">✓ Fully completed</div>
+                            <div className="text-xs text-green-600 mt-2">✓ 100% complete</div>
                         </div>
                         
                         <div className="bg-white rounded-xl shadow-lg p-6 border-l-4 border-yellow-500">
@@ -1926,11 +1983,25 @@
                             <div className="text-3xl font-bold text-gray-800">{analytics.inProgressJourneys}</div>
                             <div className="text-xs text-yellow-600 mt-2">Currently learning</div>
                         </div>
-                        
+                    </div>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
                         <div className="bg-white rounded-xl shadow-lg p-6 border-l-4 border-purple-500">
-                            <div className="text-sm text-gray-600 mb-1">Avg. Steps Completed</div>
-                            <div className="text-3xl font-bold text-gray-800">{analytics.avgCompletion.toFixed(1)}</div>
-                            <div className="text-xs text-gray-500 mt-2">Per user journey</div>
+                            <div className="text-sm text-gray-600 mb-1">Avg. Completion</div>
+                            <div className="text-3xl font-bold text-gray-800">{analytics.avgCompletionPercent.toFixed(1)}%</div>
+                            <div className="text-xs text-gray-500 mt-2">Average progress across all users</div>
+                            <div className="mt-3 text-xs">
+                                {analytics.avgCompletionPercent < 25 && <span className="text-red-600">⚠️ Low engagement - review content</span>}
+                                {analytics.avgCompletionPercent >= 25 && analytics.avgCompletionPercent < 50 && <span className="text-yellow-600">⚡ Fair - room for improvement</span>}
+                                {analytics.avgCompletionPercent >= 50 && analytics.avgCompletionPercent < 75 && <span className="text-blue-600">👍 Good engagement</span>}
+                                {analytics.avgCompletionPercent >= 75 && <span className="text-green-600">🎉 Excellent engagement!</span>}
+                            </div>
+                        </div>
+                        
+                        <div className="bg-white rounded-xl shadow-lg p-6 border-l-4 border-teal-500">
+                            <div className="text-sm text-gray-600 mb-1">Total Training Steps</div>
+                            <div className="text-3xl font-bold text-gray-800">{analytics.totalSteps}</div>
+                            <div className="text-xs text-gray-500 mt-2">Across {analytics.publishedJourneys} published {analytics.publishedJourneys === 1 ? 'journey' : 'journeys'}</div>
                         </div>
                     </div>
                     
@@ -1938,10 +2009,11 @@
                         <h2 className="text-xl font-bold text-gray-800 mb-4">📊 More detailed analytics coming soon...</h2>
                         <p className="text-gray-600">Future features:</p>
                         <ul className="list-disc list-inside text-gray-600 mt-2 space-y-1">
+                            <li>Journey-specific completion breakdown</li>
                             <li>Completion rates by specialty</li>
                             <li>Average time per journey</li>
-                            <li>Most/least difficult steps</li>
-                            <li>User engagement trends</li>
+                            <li>Step-level drop-off analysis</li>
+                            <li>User engagement trends over time</li>
                             <li>Export reports to CSV/PDF</li>
                         </ul>
                     </div>

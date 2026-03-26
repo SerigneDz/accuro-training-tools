@@ -216,6 +216,16 @@
             const [journeys, setJourneys] = useState([]);
             const [loading, setLoading] = useState(true);
             const [editingJourney, setEditingJourney] = useState(null);
+            const [selectedCategory, setSelectedCategory] = useState('all');
+            
+            // Define categories
+            const categories = [
+                { id: 'all', label: 'All Journeys', icon: '📦' },
+                { id: 'clinical_apps', label: 'Clinical Apps', icon: '📱' },
+                { id: 'processes', label: 'Processes & Procedures', icon: '📋' },
+                { id: 'onboarding', label: 'Onboarding', icon: '🎓' },
+                { id: 'other', label: 'Other', icon: '📌' }
+            ];
             
             useEffect(() => {
                 loadJourneys();
@@ -239,9 +249,15 @@
                     title: '',
                     description: '',
                     status: 'draft',
+                    category: 'other',  // Default category
                     stepIds: []
                 });
             };
+            
+            // Filter journeys by category
+            const filteredJourneys = selectedCategory === 'all' 
+                ? journeys 
+                : journeys.filter(j => (j.category || 'other') === selectedCategory);
             
             const deleteJourney = async (journeyId) => {
                 if (!confirm('Are you sure? This will delete the journey and all its data.')) return;
@@ -333,6 +349,7 @@
                         title: sourceJourney.title + ' (Copy)',
                         description: sourceJourney.description,
                         specialties: sourceJourney.specialties || (sourceJourney.specialty ? [sourceJourney.specialty] : []),  // Handle both old and new format
+                        category: sourceJourney.category || 'other',  // Clone category
                         status: 'draft',  // Clone as draft
                         stepIds: newStepIds,
                         attachments: sourceJourney.attachments || [],
@@ -370,8 +387,57 @@
                         </div>
                     </div>
                     
+                    {/* Category Tabs */}
+                    <div className="bg-white rounded-xl shadow-lg p-2 mb-6 flex flex-wrap gap-2">
+                        {categories.map(cat => (
+                            <button
+                                key={cat.id}
+                                onClick={() => setSelectedCategory(cat.id)}
+                                className={`flex items-center gap-2 px-4 py-2 rounded-lg font-semibold transition ${
+                                    selectedCategory === cat.id
+                                        ? 'bg-gradient-to-r from-blue-500 to-indigo-600 text-white shadow-md'
+                                        : 'text-gray-600 hover:bg-gray-100'
+                                }`}
+                            >
+                                <span className="text-lg">{cat.icon}</span>
+                                <span>{cat.label}</span>
+                                <span className={`text-xs px-2 py-0.5 rounded-full ${
+                                    selectedCategory === cat.id
+                                        ? 'bg-white/20 text-white'
+                                        : 'bg-gray-200 text-gray-600'
+                                }`}>
+                                    {cat.id === 'all' 
+                                        ? journeys.length 
+                                        : journeys.filter(j => (j.category || 'other') === cat.id).length
+                                    }
+                                </span>
+                            </button>
+                        ))}
+                    </div>
+                    
+                    {/* Journey Cards */}
+                    {filteredJourneys.length === 0 ? (
+                        <div className="bg-white rounded-xl shadow-lg p-12 text-center">
+                            <div className="text-6xl mb-4">📭</div>
+                            <h3 className="text-xl font-bold text-gray-800 mb-2">
+                                No journeys in this category
+                            </h3>
+                            <p className="text-gray-600 mb-4">
+                                {selectedCategory === 'all' 
+                                    ? 'Create your first journey to get started!'
+                                    : `Create a journey and set its category to "${categories.find(c => c.id === selectedCategory)?.label}"`
+                                }
+                            </p>
+                            <button
+                                onClick={createNewJourney}
+                                className="px-6 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition"
+                            >
+                                Create Journey
+                            </button>
+                        </div>
+                    ) : (
                     <div className="grid gap-6">
-                        {journeys.map(journey => (
+                        {filteredJourneys.map(journey => (
                             <div key={journey.id} className="bg-white rounded-xl shadow-lg p-6 hover:shadow-xl transition">
                                 <div className="flex justify-between items-start">
                                     <div className="flex-1">
@@ -384,6 +450,11 @@
                                             }`}>
                                                 {journey.status === 'published' ? '✓ Published' : '📝 Draft'}
                                             </span>
+                                            {journey.category && journey.category !== 'other' && (
+                                                <span className="px-3 py-1 rounded-full text-xs font-semibold bg-blue-100 text-blue-700">
+                                                    {categories.find(c => c.id === journey.category)?.icon} {categories.find(c => c.id === journey.category)?.label}
+                                                </span>
+                                            )}
                                         </div>
                                         <p className="text-gray-600 mb-3">{journey.description}</p>
                                         <div className="flex gap-4 text-sm text-gray-500">
@@ -441,19 +512,6 @@
                             </div>
                         ))}
                     </div>
-                    
-                    {journeys.length === 0 && (
-                        <div className="text-center py-12 bg-white rounded-xl">
-                            <div className="text-6xl mb-4">📚</div>
-                            <h3 className="text-xl font-bold text-gray-800 mb-2">No Journeys Yet</h3>
-                            <p className="text-gray-600 mb-6">Create your first training journey to get started!</p>
-                            <button
-                                onClick={createNewJourney}
-                                className="px-6 py-3 bg-gradient-to-r from-blue-500 to-indigo-600 text-white rounded-lg hover:from-blue-600 hover:to-indigo-700 transition font-semibold"
-                            >
-                                Create Journey
-                            </button>
-                        </div>
                     )}
                 </div>
             );
@@ -466,7 +524,8 @@
             // Handle backward compatibility: convert old 'specialty' to new 'specialties' array
             const initialFormData = {
                 ...journey,
-                specialties: journey.specialties || (journey.specialty ? [journey.specialty] : [])
+                specialties: journey.specialties || (journey.specialty ? [journey.specialty] : []),
+                category: journey.category || 'other'  // Default to 'other' if not set
             };
             
             const [formData, setFormData] = useState(initialFormData);
@@ -589,6 +648,7 @@
             		title: formData.title,
             		description: formData.description,
             		status: formData.status,
+            		category: formData.category || 'other',  // Save category
             		stepIds: steps.map(s => s.id),
             		attachments: attachments,
             		lastModified: serverTimestamp()
@@ -771,6 +831,24 @@
                                     rows="3"
                                     placeholder="Brief description of this journey"
                                 />
+                            </div>
+                            
+                            {/* Category Selection */}
+                            <div>
+                                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                                    Category
+                                    <span className="text-xs text-gray-500 font-normal ml-2">(How this journey will be organized)</span>
+                                </label>
+                                <select
+                                    value={formData.category || 'other'}
+                                    onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                                    className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:border-blue-500 focus:outline-none bg-white"
+                                >
+                                    <option value="clinical_apps">📱 Clinical Apps - Demos & Workflows</option>
+                                    <option value="processes">📋 Processes & Procedures</option>
+                                    <option value="onboarding">🎓 Onboarding</option>
+                                    <option value="other">📌 Other</option>
+                                </select>
                             </div>
                             
                             {/* Link Attachments Section */}

@@ -3,19 +3,18 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Accuro Training Platform</title>
+    <title>Accuro Training Platform - Student</title>
     
     <!-- Firebase v9 (modular) -->
     <script type="module">
         import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
-        import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut, sendPasswordResetEmail } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
+        import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut, sendPasswordResetEmail } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
         import { getFirestore, collection, doc, getDoc, setDoc, updateDoc, query, where, getDocs, onSnapshot, arrayUnion, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
         
         // Make Firebase available globally
         window.firebaseModules = {
             initializeApp,
             getAuth,
-            createUserWithEmailAndPassword,
             signInWithEmailAndPassword,
             onAuthStateChanged,
             signOut,
@@ -31,7 +30,7 @@
             onSnapshot,
             arrayUnion,
             serverTimestamp,
-	    sendPasswordResetEmail
+            sendPasswordResetEmail
         };
     </script>
     
@@ -46,6 +45,12 @@
     <style>
         body { margin: 0; padding: 0; }
         #root { min-height: 100vh; }
+        .line-clamp-2 {
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
     </style>
 </head>
 <body>
@@ -57,16 +62,15 @@
         // ============================================
         // FIREBASE CONFIGURATION
         // ============================================
-        // IMPORTANT: Replace with your Firebase config
         const firebaseConfig = {
-  		apiKey: "AIzaSyDtSuwTZnlvoWSz0E-imfMpV2etikcD7XA",
-  		authDomain: "accuro-trainer.firebaseapp.com",
-  		projectId: "accuro-trainer",
-  		storageBucket: "accuro-trainer.firebasestorage.app",
-  		messagingSenderId: "774405600835",
-  		appId: "1:774405600835:web:c3c5d5334c615f113946f6",
-  		measurementId: "G-2KMSC5WEMM"
-	};
+            apiKey: "AIzaSyDtSuwTZnlvoWSz0E-imfMpV2etikcD7XA",
+            authDomain: "accuro-trainer.firebaseapp.com",
+            projectId: "accuro-trainer",
+            storageBucket: "accuro-trainer.firebasestorage.app",
+            messagingSenderId: "774405600835",
+            appId: "1:774405600835:web:c3c5d5334c615f113946f6",
+            measurementId: "G-2KMSC5WEMM"
+        };
         
         // Initialize Firebase
         const { initializeApp, getAuth, getFirestore } = window.firebaseModules;
@@ -75,74 +79,57 @@
         const db = getFirestore(app);
         
         // ============================================
-        // ICONS (SVG Components)
+        // ICONS
         // ============================================
-        const ChevronRight = ({ className, ...props }) => (
-            <svg className={className} {...props} width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <polyline points="9 18 15 12 9 6"></polyline>
+        const LogOut = ({ className }) => (
+            <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
             </svg>
         );
         
-        const Check = ({ className, ...props }) => (
-            <svg className={className} {...props} width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
-                <polyline points="20 6 9 17 4 12"></polyline>
+        const ChevronRight = ({ className }) => (
+            <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
             </svg>
         );
         
-        const LogOut = ({ className, ...props }) => (
-            <svg className={className} {...props} width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
-                <polyline points="16 17 21 12 16 7"></polyline>
-                <line x1="21" y1="12" x2="9" y2="12"></line>
+        const ChevronLeft = ({ className }) => (
+            <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
         );
         
-        const Home = ({ className, ...props }) => (
-            <svg className={className} {...props} width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
-                <polyline points="9 22 9 12 15 12 15 22"></polyline>
-            </svg>
-        );
-        
-        const BookOpen = ({ className, ...props }) => (
-            <svg className={className} {...props} width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path>
-                <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path>
-            </svg>
-        );
-        
-        const User = ({ className, ...props }) => (
-            <svg className={className} {...props} width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
-                <circle cx="12" cy="7" r="4"></circle>
+        const CheckCircle = ({ className }) => (
+            <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
         );
         
         // ============================================
-        // LOGIN/SIGNUP COMPONENT (STUDENT ONLY)
+        // LOGIN PAGE
         // ============================================
-        function LoginPage({ onLogin }) {
-            // Load saved email from localStorage
-            const [email, setEmail] = useState(localStorage.getItem('accuro_last_email') || '');
+        function LoginPage() {
+            const [email, setEmail] = useState('');
             const [password, setPassword] = useState('');
-            const [isSignUp, setIsSignUp] = useState(false);
             const [error, setError] = useState('');
             const [loading, setLoading] = useState(false);
+            const [showResetPassword, setShowResetPassword] = useState(false);
+            const [resetEmail, setResetEmail] = useState('');
+            const [resetMessage, setResetMessage] = useState('');
 
-            const handleAuth = async (e) => {
+            useEffect(() => {
+                const savedEmail = localStorage.getItem('accuro_last_email');
+                if (savedEmail) setEmail(savedEmail);
+            }, []);
+
+            const handleLogin = async (e) => {
                 e.preventDefault();
                 setError('');
                 setLoading(true);
-                
-                const { createUserWithEmailAndPassword, signInWithEmailAndPassword } = window.firebaseModules;
-                
+
                 try {
-                    if (isSignUp) {
-                        await createUserWithEmailAndPassword(auth, email, password);
-                    } else {
-                        await signInWithEmailAndPassword(auth, email, password);
-                    }
-                    // Save email to localStorage for next time
+                    const { signInWithEmailAndPassword } = window.firebaseModules;
+                    await signInWithEmailAndPassword(auth, email, password);
                     localStorage.setItem('accuro_last_email', email);
                 } catch (err) {
                     setError(err.message);
@@ -150,519 +137,257 @@
                 }
             };
 
-            return (
-                <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 p-4">
-                    <div className="bg-white p-8 rounded-2xl shadow-2xl w-full max-w-md">
-                        <div className="text-center mb-8">
-                            <div className="text-5xl mb-3">🏥</div>
-                            <h1 className="text-3xl font-black text-gray-800 mb-2">
-                                Accuro Training
-                            </h1>
-                            <p className="text-gray-600">
-                                Student Portal
-                            </p>
+            const handlePasswordReset = async (e) => {
+                e.preventDefault();
+                setResetMessage('');
+                setError('');
+
+                try {
+                    const { sendPasswordResetEmail } = window.firebaseModules;
+                    await sendPasswordResetEmail(auth, resetEmail);
+                    setResetMessage('Password reset email sent! Check your inbox.');
+                    setTimeout(() => {
+                        setShowResetPassword(false);
+                        setResetMessage('');
+                    }, 3000);
+                } catch (err) {
+                    setError(err.message);
+                }
+            };
+
+            if (showResetPassword) {
+                return (
+                    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-indigo-500 to-purple-600 p-4">
+                        <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md">
+                            <h2 className="text-3xl font-bold text-gray-800 mb-6 text-center">Reset Password</h2>
+                            
+                            <form onSubmit={handlePasswordReset} className="space-y-4">
+                                <div>
+                                    <label className="block text-sm font-semibold text-gray-700 mb-2">Email</label>
+                                    <input
+                                        type="email"
+                                        value={resetEmail}
+                                        onChange={(e) => setResetEmail(e.target.value)}
+                                        className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-indigo-500 focus:outline-none"
+                                        required
+                                    />
+                                </div>
+
+                                {error && (
+                                    <div className="bg-red-50 border-2 border-red-200 text-red-700 px-4 py-3 rounded-lg">
+                                        {error}
+                                    </div>
+                                )}
+
+                                {resetMessage && (
+                                    <div className="bg-green-50 border-2 border-green-200 text-green-700 px-4 py-3 rounded-lg">
+                                        {resetMessage}
+                                    </div>
+                                )}
+
+                                <button
+                                    type="submit"
+                                    className="w-full bg-gradient-to-r from-indigo-500 to-purple-600 text-white font-bold py-3 px-4 rounded-lg hover:from-indigo-600 hover:to-purple-700 transition"
+                                >
+                                    Send Reset Email
+                                </button>
+
+                                <button
+                                    type="button"
+                                    onClick={() => setShowResetPassword(false)}
+                                    className="w-full text-indigo-600 hover:text-indigo-800 font-semibold"
+                                >
+                                    Back to Login
+                                </button>
+                            </form>
                         </div>
-                        
-                        <form onSubmit={handleAuth} className="space-y-4">
+                    </div>
+                );
+            }
+
+            return (
+                <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-indigo-500 to-purple-600 p-4">
+                    <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md">
+                        <div className="text-center mb-8">
+                            <h1 className="text-4xl font-black text-gray-800 mb-2">Accuro Training</h1>
+                            <p className="text-gray-600">Student Portal</p>
+                        </div>
+
+                        <form onSubmit={handleLogin} className="space-y-4">
                             <div>
-                                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                                    Email Address
-                                </label>
+                                <label className="block text-sm font-semibold text-gray-700 mb-2">Email</label>
                                 <input
                                     type="email"
                                     value={email}
                                     onChange={(e) => setEmail(e.target.value)}
-                                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
-                                    placeholder="you@example.com"
+                                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-indigo-500 focus:outline-none"
+                                    placeholder="your.email@example.com"
                                     required
                                 />
                             </div>
-                            
+
                             <div>
-                                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                                    Password
-                                </label>
+                                <label className="block text-sm font-semibold text-gray-700 mb-2">Password</label>
                                 <input
                                     type="password"
                                     value={password}
                                     onChange={(e) => setPassword(e.target.value)}
-                                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
+                                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:border-indigo-500 focus:outline-none"
                                     placeholder="••••••••"
                                     required
-                                    minLength="6"
                                 />
                             </div>
-                            
+
                             {error && (
-                                <div className="bg-red-50 border-2 border-red-200 text-red-700 p-3 rounded-xl text-sm">
+                                <div className="bg-red-50 border-2 border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
                                     {error}
                                 </div>
                             )}
-                            
+
                             <button
                                 type="submit"
                                 disabled={loading}
-                                className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 text-white py-3 rounded-xl font-bold hover:from-indigo-700 hover:to-purple-700 transition shadow-lg disabled:opacity-50"
+                                className="w-full bg-gradient-to-r from-indigo-500 to-purple-600 text-white font-bold py-3 px-4 rounded-lg hover:from-indigo-600 hover:to-purple-700 transition disabled:opacity-50"
                             >
-                                {loading ? 'Please wait...' : (isSignUp ? 'Create Account' : 'Sign In')}
+                                {loading ? 'Signing In...' : 'Sign In'}
                             </button>
 
-			<div className="mt-4 text-center">
-    			<button
-        		type="button"
-        		onClick={async () => {
-            			if (!email) {
-                			setError('Please enter your email address first');
-                			return;
-            			}
-            			try {
-                			const { sendPasswordResetEmail } = window.firebaseModules;
-                			await sendPasswordResetEmail(auth, email);
-                			alert(`Password reset email sent to ${email}. Check your inbox (and spam folder)!`);
-            			} catch (err) {
-                			console.error('Password reset error:', err);
-                			console.error('Error code:', err.code);
-                			console.error('Error message:', err.message);
-                			
-                			// Show user-friendly error
-                			if (err.code === 'auth/user-not-found') {
-                			    alert('No account found with this email address.');
-                			} else if (err.code === 'auth/invalid-email') {
-                			    alert('Invalid email address format.');
-                			} else if (err.code === 'auth/too-many-requests') {
-                			    alert('Too many reset attempts. Please try again later.');
-                			} else {
-                			    alert(`Error sending reset email: ${err.message}`);
-                			}
-                			setError(err.message);
-            			}
-        		}}
-        			className="text-sm text-indigo-600 hover:underline"
-    			>
-        			Forgot password?
-    			</button>
-			</div>			
-
-                        </form>
-                        
-                        <div className="mt-6 text-center">
                             <button
-                                onClick={() => {
-                                    setIsSignUp(!isSignUp);
-                                    setError('');
-                                }}
-                                className="text-indigo-600 hover:underline text-sm font-semibold"
+                                type="button"
+                                onClick={() => setShowResetPassword(true)}
+                                className="w-full text-sm text-indigo-600 hover:text-indigo-800 font-semibold"
                             >
-                                {isSignUp ? 'Already have an account? Sign in' : "Don't have an account? Sign up"}
+                                Forgot Password?
                             </button>
-                        </div>
-                        
-                        {isSignUp && (
-                            <div className="mt-4 text-xs text-gray-500 text-center">
-                                By signing up, you agree to our Terms of Service
-                            </div>
-                        )}
-                        
-                        <div className="mt-6 pt-6 border-t border-gray-200 text-center">
-                            <p className="text-sm text-gray-600 mb-2">Are you a trainer?</p>
-                            <a href="admin.html" className="text-indigo-600 hover:underline font-semibold text-sm">
-                                Go to Admin Portal →
-                            </a>
-                        </div>
+                        </form>
                     </div>
                 </div>
             );
         }
-        
+
         // ============================================
-        // SPECIALTY SELECTION COMPONENT
+        // STUDENT DASHBOARD - New Journey Cards UX
         // ============================================
-        function SpecialtySelector({ user, onComplete }) {
-            const [specialty, setSpecialty] = useState('');
-            const [displayName, setDisplayName] = useState('');
-            const [loading, setLoading] = useState(false);
-            
-            const specialties = [
-                { id: 'nurse', name: 'Registered Nurse', icon: '👩‍⚕️', color: 'from-blue-400 to-blue-600' },
-                { id: 'moa', name: 'Medical Office Assistant', icon: '💼', color: 'from-purple-400 to-purple-600' },
-                { id: 'dietician', name: 'Dietician', icon: '🥗', color: 'from-green-400 to-green-600' },
-                { id: 'physician', name: 'Physician', icon: '👨‍⚕️', color: 'from-red-400 to-red-600' },
-                { id: 'pharmacist', name: 'Pharmacist', icon: '💊', color: 'from-pink-400 to-pink-600' },
-                { id: 'lab_tech', name: 'Lab Technician', icon: '🔬', color: 'from-cyan-400 to-cyan-600' }
-            ];
-            
-            const handleSubmit = async () => {
-                if (!specialty || !displayName.trim()) return;
-                
-                setLoading(true);
-                const { doc, setDoc, serverTimestamp } = window.firebaseModules;
-                
-                try {
-                    await setDoc(doc(db, 'users', user.uid), {
-                        email: user.email,
-                        displayName: displayName.trim(),
-                        specialty: specialty,
-                        role: 'student',
-                        createdAt: serverTimestamp(),
-                        lastLogin: serverTimestamp()
-                    });
-                    
-                    onComplete();
-                } catch (err) {
-                    console.error('Error saving profile:', err);
-                    setLoading(false);
-                }
-            };
-            
-            return (
-                <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 p-4">
-                    <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-3xl">
-                        <div className="text-center mb-8">
-                            <h2 className="text-4xl font-black text-gray-800 mb-2">
-                                Welcome! 👋
-                            </h2>
-                            <p className="text-gray-600 text-lg">
-                                Let's set up your learning profile
-                            </p>
-                        </div>
-                        
-                        {/* Display Name */}
-                        <div className="mb-8">
-                            <label className="block text-lg font-bold text-gray-700 mb-3">
-                                What's your name?
-                            </label>
-                            <input
-                                type="text"
-                                value={displayName}
-                                onChange={(e) => setDisplayName(e.target.value)}
-                                className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-lg"
-                                placeholder="Enter your full name"
-                            />
-                        </div>
-                        
-                        {/* Specialty Selection */}
-                        <div className="mb-8">
-                            <label className="block text-lg font-bold text-gray-700 mb-3">
-                                My specialty:
-                            </label>
-                            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                                {specialties.map(spec => (
-                                    <button
-                                        type="button"
-                                        key={spec.id}
-                                        onClick={() => setSpecialty(spec.id)}
-                                        className={`p-4 rounded-xl border-2 transition transform hover:scale-105 ${
-                                            specialty === spec.id 
-                                                ? 'border-indigo-500 shadow-lg' 
-                                                : 'border-gray-200 hover:border-gray-300'
-                                        }`}
-                                    >
-                                        <div className={`w-full h-2 rounded-full mb-3 bg-gradient-to-r ${spec.color}`}></div>
-                                        <div className="text-3xl mb-2">{spec.icon}</div>
-                                        <div className="font-semibold text-sm">{spec.name}</div>
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
-                        
-                        <button
-                            onClick={handleSubmit}
-                            disabled={!specialty || !displayName.trim() || loading}
-                            className={`w-full py-4 rounded-xl font-bold text-lg transition shadow-lg ${
-                                specialty && displayName.trim() && !loading
-                                    ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white hover:from-indigo-700 hover:to-purple-700' 
-                                    : 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                            }`}
-                        >
-                            {loading ? 'Setting up...' : 'Continue to Training'}
-                        </button>
-                    </div>
-                </div>
-            );
-        }
-        
-        // ============================================
-        // STUDENT DASHBOARD (NEW!)
-        // ============================================
-        function StudentDashboard({ user, userProfile, selectedJourney, setSelectedJourney, selectedProgress, setSelectedProgress, onStartJourney }) {
-            const [progress, setProgress] = useState(selectedProgress); // Use prop as initial value
-            const [journey, setJourney] = useState(selectedJourney); // Use prop as initial value
+        function StudentDashboard({ user, userProfile }) {
             const [availableJourneys, setAvailableJourneys] = useState([]);
+            const [journeyProgress, setJourneyProgress] = useState({});
             const [loading, setLoading] = useState(true);
-            
-            // Sync local state with lifted state
+            const [currentView, setCurrentView] = useState('dashboard'); // 'dashboard' or 'journey'
+            const [selectedJourney, setSelectedJourney] = useState(null);
+
             useEffect(() => {
-                setJourney(selectedJourney);
-                setProgress(selectedProgress);
-            }, [selectedJourney, selectedProgress]);
-            
-            // Update lifted state when local changes
-            useEffect(() => {
-                setSelectedJourney(journey);
-            }, [journey]);
-            
-            useEffect(() => {
-                setSelectedProgress(progress);
-            }, [progress]);
-            
-            // Cleanup old progress documents when journey is selected
-            const cleanupOldProgress = async (userId, specialty, currentJourneyId) => {
-                const { collection, query, where, getDocs, doc, deleteDoc } = window.firebaseModules;
-                
-                try {
-                    console.log('Cleaning up old progress documents...');
-                    
-                    // Find all progress docs for this user
-                    const progressRef = collection(db, 'userProgress');
-                    const allDocs = await getDocs(progressRef);
-                    
-                    const toDelete = [];
-                    allDocs.forEach(docSnap => {
-                        const docId = docSnap.id;
-                        
-                        // Old format: userId_specialty
-                        if (docId === `${userId}_${specialty}`) {
-                            console.log('Found old format progress:', docId);
-                            toDelete.push(docId);
-                        }
-                        
-                        // Duplicate journey progress (same user, different journey than current)
-                        // Keep only the current journey's progress
-                        const data = docSnap.data();
-                        if (docId.startsWith(userId) && 
-                            data.journeyId && 
-                            data.journeyId !== currentJourneyId &&
-                            data.specialty === specialty) {
-                            console.log('Found duplicate journey progress:', docId);
-                            // Don't delete other journey progress - user might switch back!
-                            // Only delete if it's for same specialty but orphaned
-                        }
-                    });
-                    
-                    // Delete old format docs
-                    for (const docId of toDelete) {
-                        await deleteDoc(doc(db, 'userProgress', docId));
-                        console.log('Deleted old progress:', docId);
-                    }
-                    
-                    console.log('Cleanup complete');
-                } catch (err) {
-                    console.error('Error during cleanup:', err);
-                }
-            };
-            
-            useEffect(() => {
-                // Only load if we don't already have a journey
-                if (!journey) {
-                    loadDashboardData();
-                } else {
-                    // Clean up old progress when we have a journey
-                    cleanupOldProgress(user.uid, userProfile.specialty, journey.id);
-                    setLoading(false);
-                }
+                loadAllJourneys();
             }, []);
-            
-            const loadDashboardData = async () => {
-                const { collection, query, where, getDocs, doc, getDoc, onSnapshot } = window.firebaseModules;
-                
+
+            const loadAllJourneys = async () => {
+                const { collection, query, where, getDocs, doc, onSnapshot } = window.firebaseModules;
+
                 try {
-                    // Load all journeys for specialty
                     const journeysRef = collection(db, 'journeys');
-                    
-                    // Query for new format (array-contains for specialties array)
+
+                    // Query new format (array-contains)
                     const qNew = query(
                         journeysRef,
                         where('specialties', 'array-contains', userProfile.specialty),
                         where('status', '==', 'published')
                     );
-                    const newFormatResults = await getDocs(qNew);
-                    
-                    // Query for old format (single specialty field)
+                    const newResults = await getDocs(qNew);
+
+                    // Query old format (single specialty)
                     const qOld = query(
                         journeysRef,
                         where('specialty', '==', userProfile.specialty),
                         where('status', '==', 'published')
                     );
-                    const oldFormatResults = await getDocs(qOld);
-                    
-                    // Combine both results (deduplicate by ID)
+                    const oldResults = await getDocs(qOld);
+
+                    // Combine and deduplicate
                     const journeyMap = new Map();
-                    
-                    newFormatResults.docs.forEach(doc => {
-                        journeyMap.set(doc.id, { id: doc.id, ...doc.data() });
+                    newResults.docs.forEach(d => journeyMap.set(d.id, { id: d.id, ...d.data() }));
+                    oldResults.docs.forEach(d => {
+                        if (!journeyMap.has(d.id)) journeyMap.set(d.id, { id: d.id, ...d.data() });
                     });
-                    
-                    oldFormatResults.docs.forEach(doc => {
-                        if (!journeyMap.has(doc.id)) {
-                            journeyMap.set(doc.id, { id: doc.id, ...doc.data() });
-                        }
-                    });
-                    
-                    const allJourneys = Array.from(journeyMap.values());
-                    
-                    if (allJourneys.length > 0) {
-                        // Auto-migrate old format: specialty (string) -> specialties (array) for display
-                        let journeys = allJourneys.map(j => {
-                            if (j.specialty && !j.specialties) {
-                                console.log('Auto-migrating journey:', j.title);
-                                return {
-                                    ...j,
-                                    specialties: [j.specialty]
-                                };
+
+                    const journeys = Array.from(journeyMap.values());
+                    setAvailableJourneys(journeys);
+
+                    // Load progress for each journey
+                    for (const journey of journeys) {
+                        const progressId = `${user.uid}_${journey.id}`;
+                        const progressRef = doc(db, 'userProgress', progressId);
+
+                        onSnapshot(progressRef, (docSnap) => {
+                            if (docSnap.exists()) {
+                                setJourneyProgress(prev => ({
+                                    ...prev,
+                                    [journey.id]: docSnap.data()
+                                }));
+                            } else {
+                                // Initialize progress
+                                const { setDoc, serverTimestamp } = window.firebaseModules;
+                                setDoc(progressRef, {
+                                    userId: user.uid,
+                                    journeyId: journey.id,
+                                    specialty: userProfile.specialty,
+                                    totalSteps: journey.stepIds?.length || 0,
+                                    startedAt: serverTimestamp(),
+                                    completedStepIds: [],
+                                    status: 'in_progress',
+                                    currentStepIndex: 0
+                                });
                             }
-                            return j;
                         });
-                        
-                        console.log('=== JOURNEY DEBUG INFO ===');
-                        console.log('User specialty:', userProfile.specialty);
-                        console.log('Found journeys:', journeys.length);
-                        journeys.forEach((j, index) => {
-                            console.log(`Journey ${index + 1}:`, {
-                                title: j.title,
-                                specialties: j.specialties,
-                                specialty: j.specialty,
-                                status: j.status
-                            });
-                        });
-                        console.log('========================');
-                        
-                        setAvailableJourneys(journeys);
-                        
-                        // If only one journey, auto-select it
-                        if (journeys.length === 1) {
-                            console.log('Auto-selecting single journey:', journeys[0].title);
-                            setJourney(journeys[0]);
-                            
-                            // Listen to progress for this journey
-                            const progressId = `${user.uid}_${journeys[0].id}`;
-                            const progressRef = doc(db, 'userProgress', progressId);
-                            
-                            onSnapshot(progressRef, (doc) => {
-                                if (doc.exists()) {
-                                    setProgress(doc.data());
-                                } else {
-                                    // Initialize progress
-                                    const { setDoc, serverTimestamp } = window.firebaseModules;
-                                    setDoc(progressRef, {
-                                        userId: user.uid,
-                                        journeyId: journeys[0].id,
-                                        specialty: userProfile.specialty,
-                                        totalSteps: journeys[0].stepIds?.length || 0,
-                                        startedAt: serverTimestamp(),
-                                        completedStepIds: [],
-                                        status: 'in_progress',
-                                        currentStepIndex: 0
-                                    });
-                                }
-                            });
-                        }
-                        // If multiple journeys, let user select (journey stays null, shows selector)
                     }
-                    
+
                     setLoading(false);
                 } catch (err) {
-                    console.error('Error loading dashboard:', err);
+                    console.error('Error loading journeys:', err);
                     setLoading(false);
                 }
             };
-            
-            const calculateProgress = () => {
-                if (!progress || !journey || !journey.stepIds) return 0;
+
+            const selectJourney = (journey) => {
+                setSelectedJourney(journey);
+                setCurrentView('journey');
+            };
+
+            const calculateProgressPercent = (journey) => {
+                const progress = journeyProgress[journey.id];
+                if (!progress || !journey.stepIds) return 0;
                 return Math.round((progress.completedStepIds?.length || 0) / journey.stepIds.length * 100);
             };
-            
+
             const handleSignOut = async () => {
                 const { signOut } = window.firebaseModules;
                 await signOut(auth);
             };
-            
+
             if (loading) {
                 return (
                     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
                         <div className="text-center">
                             <div className="text-6xl mb-4">⏳</div>
-                            <div className="text-xl font-semibold text-gray-600">Loading your dashboard...</div>
+                            <div className="text-xl font-semibold text-gray-600">Loading your training...</div>
                         </div>
                     </div>
                 );
             }
-            
-            if (!journey) {
-                // If there are multiple journeys, show selector
-                console.log('Journey is null, checking availableJourneys:', availableJourneys.length);
-                
-                if (availableJourneys.length > 1) {
-                    console.log('Showing journey selector for', availableJourneys.length, 'journeys');
-                    return (
-                        <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 p-4">
-                            <div className="bg-white rounded-2xl shadow-xl p-8 max-w-2xl w-full">
-                                <div className="text-center mb-8">
-                                    <div className="text-6xl mb-4">🎓</div>
-                                    <h2 className="text-3xl font-bold text-gray-800 mb-2">Choose Your Training Journey</h2>
-                                    <p className="text-lg text-gray-600">
-                                        {userProfile.displayName} • {userProfile.specialty.toUpperCase()}
-                                    </p>
-                                    <p className="text-sm text-gray-500 mt-2">
-                                        You have {availableJourneys.length} training journeys available
-                                    </p>
-                                </div>
-                                
-                                <div className="space-y-4">
-                                    {availableJourneys.map((j) => (
-                                        <div
-                                            key={j.id}
-                                            onClick={() => {
-                                                setJourney(j);
-                                                // Initialize progress for selected journey
-                                                const { doc, setDoc, serverTimestamp, onSnapshot } = window.firebaseModules;
-                                                const progressId = `${user.uid}_${j.id}`;
-                                                const progressRef = doc(db, 'userProgress', progressId);
-                                                
-                                                onSnapshot(progressRef, (docSnap) => {
-                                                    if (docSnap.exists()) {
-                                                        setProgress(docSnap.data());
-                                                    } else {
-                                                        setDoc(progressRef, {
-                                                            userId: user.uid,
-                                                            journeyId: j.id,
-                                                            specialty: userProfile.specialty,
-                                                            totalSteps: j.stepIds?.length || 0,
-                                                            startedAt: serverTimestamp(),
-                                                            completedStepIds: [],
-                                                            status: 'in_progress',
-                                                            currentStepIndex: 0
-                                                        });
-                                                    }
-                                                });
-                                            }}
-                                            className="border-2 border-gray-200 rounded-xl p-6 hover:border-indigo-500 hover:bg-indigo-50 cursor-pointer transition group"
-                                        >
-                                            <h3 className="text-xl font-bold text-gray-800 group-hover:text-indigo-600 mb-2">
-                                                {j.title}
-                                            </h3>
-                                            <p className="text-gray-600 mb-3">{j.description}</p>
-                                            <div className="flex gap-4 text-sm text-gray-500">
-                                                <span>📚 {j.stepIds?.length || 0} steps</span>
-                                                {j.attachments?.length > 0 && (
-                                                    <span>📎 {j.attachments.length} resources</span>
-                                                )}
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                                
-                                <button
-                                    onClick={handleSignOut}
-                                    className="mt-6 w-full px-6 py-3 bg-gray-200 hover:bg-gray-300 text-gray-700 font-semibold rounded-lg transition"
-                                >
-                                    Sign Out
-                                </button>
-                            </div>
-                        </div>
-                    );
-                }
-                
-                // No journeys available
+
+            // Show journey view
+            if (currentView === 'journey' && selectedJourney) {
+                return (
+                    <JourneyView
+                        user={user}
+                        userProfile={userProfile}
+                        journey={selectedJourney}
+                        progress={journeyProgress[selectedJourney.id]}
+                        onBack={() => setCurrentView('dashboard')}
+                    />
+                );
+            }
+
+            // No journeys available
+            if (availableJourneys.length === 0) {
                 return (
                     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 p-4">
                         <div className="bg-white rounded-2xl shadow-xl p-8 max-w-lg text-center">
@@ -671,38 +396,15 @@
                             <p className="text-lg text-indigo-600 font-semibold mb-6">
                                 {userProfile.displayName} • {userProfile.specialty.toUpperCase()}
                             </p>
-                            
+
                             <div className="bg-yellow-50 border-2 border-yellow-200 rounded-lg p-6 mb-6">
                                 <div className="text-4xl mb-3">🚧</div>
                                 <h3 className="text-xl font-bold text-gray-800 mb-2">Training Journey Coming Soon</h3>
                                 <p className="text-gray-700">
-                                    Your trainer is currently preparing training content specifically for 
-                                    <strong className="text-indigo-600"> {userProfile.specialty}</strong> professionals.
+                                    Your trainer is currently preparing training content.
                                 </p>
                             </div>
-                            
-                            <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-4 mb-6 text-left">
-                                <h4 className="font-bold text-gray-800 mb-2">📋 What happens next:</h4>
-                                <ul className="text-sm text-gray-700 space-y-2">
-                                    <li className="flex items-start gap-2">
-                                        <span className="text-blue-500 mt-0.5">✓</span>
-                                        <span>Your trainer will publish your training journey soon</span>
-                                    </li>
-                                    <li className="flex items-start gap-2">
-                                        <span className="text-blue-500 mt-0.5">✓</span>
-                                        <span>You'll be able to access it by logging back in</span>
-                                    </li>
-                                    <li className="flex items-start gap-2">
-                                        <span className="text-blue-500 mt-0.5">✓</span>
-                                        <span>No action required from you right now</span>
-                                    </li>
-                                </ul>
-                            </div>
-                            
-                            <p className="text-sm text-gray-600 mb-4">
-                                💬 <strong>Need help?</strong> Contact your trainer for more information.
-                            </p>
-                            
+
                             <button
                                 onClick={handleSignOut}
                                 className="w-full px-6 py-3 bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white font-semibold rounded-lg transition shadow-lg"
@@ -713,21 +415,8 @@
                     </div>
                 );
             }
-            
-            const progressPercent = calculateProgress();
-            const completedSteps = progress?.completedStepIds?.length || 0;
-            const totalSteps = journey.stepIds?.length || 0;
-            const daysActive = progress?.startedAt ? Math.floor((Date.now() - progress.startedAt.toDate()) / (1000 * 60 * 60 * 24)) : 0;
-            
-            console.log('Dashboard render:', {
-                progressPercent,
-                completedSteps,
-                totalSteps,
-                availableJourneysCount: availableJourneys.length,
-                currentJourneyId: journey?.id,
-                progressData: progress
-            });
-            
+
+            // Dashboard with journey cards
             return (
                 <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
                     {/* Header */}
@@ -736,37 +425,19 @@
                             <div className="flex justify-between items-center">
                                 <div>
                                     <h1 className="text-2xl font-bold text-gray-800">Accuro Training</h1>
-                                    <p className="text-sm text-gray-600">{userProfile.displayName} • {userProfile.specialty}</p>
+                                    <p className="text-sm text-gray-600">{userProfile.displayName} • {userProfile.specialty.toUpperCase()}</p>
                                 </div>
-                                <div className="flex items-center gap-2">
-                                    {/* Show Change Journey button if multiple journeys available */}
-                                    {availableJourneys.length > 1 && (
-                                        <button
-                                            onClick={() => {
-                                                setJourney(null);
-                                                setProgress(null);
-                                            }}
-                                            className="flex items-center gap-2 px-4 py-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition font-semibold"
-                                            title="Switch to a different training journey"
-                                        >
-                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
-                                            </svg>
-                                            Change Journey
-                                        </button>
-                                    )}
-                                    <button
-                                        onClick={handleSignOut}
-                                        className="flex items-center gap-2 px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition"
-                                    >
-                                        <LogOut className="w-4 h-4" />
-                                        Sign Out
-                                    </button>
-                                </div>
+                                <button
+                                    onClick={handleSignOut}
+                                    className="flex items-center gap-2 px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition"
+                                >
+                                    <LogOut className="w-4 h-4" />
+                                    Sign Out
+                                </button>
                             </div>
                         </div>
                     </div>
-                    
+
                     {/* Dashboard Content */}
                     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
                         {/* Welcome Section */}
@@ -775,159 +446,119 @@
                                 Welcome back, {userProfile.displayName.split(' ')[0]}! 👋
                             </h2>
                             <p className="text-gray-600">
-                                {progressPercent === 100 
-                                    ? "Congratulations on completing your training!" 
-                                    : progressPercent > 0 
-                                        ? "Keep up the great progress on your journey!" 
-                                        : "Ready to start your training journey?"}
+                                You have {availableJourneys.length} training {availableJourneys.length === 1 ? 'journey' : 'journeys'} available
                             </p>
                         </div>
-                        
-                        {/* Stats Cards */}
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-                            <div className="bg-white rounded-xl shadow-lg p-6 border-l-4 border-indigo-500">
-                                <div className="flex items-center justify-between mb-2">
-                                    <div className="text-sm font-semibold text-gray-600">Overall Progress</div>
-                                    <div className="text-3xl">{progressPercent === 100 ? '🎉' : '📊'}</div>
-                                </div>
-                                <div className="text-4xl font-black text-gray-800 mb-2">{progressPercent}%</div>
-                                <div className="text-sm text-gray-600">{completedSteps} of {totalSteps} steps completed</div>
-                            </div>
-                            
-                            <div className="bg-white rounded-xl shadow-lg p-6 border-l-4 border-green-500">
-                                <div className="flex items-center justify-between mb-2">
-                                    <div className="text-sm font-semibold text-gray-600">Current Journey</div>
-                                    <div className="text-3xl">🗺️</div>
-                                </div>
-                                <div className="text-xl font-bold text-gray-800 mb-2">{journey.title}</div>
-                                <div className="text-sm text-gray-600 mb-3">{userProfile.specialty} training</div>
-                                
-                                {/* Show change link if multiple journeys */}
-                                {availableJourneys.length > 1 && (
-                                    <button
-                                        onClick={() => {
-                                            setJourney(null);
-                                            setProgress(null);
-                                        }}
-                                        className="text-xs text-indigo-600 hover:text-indigo-800 font-semibold flex items-center gap-1"
+
+                        {/* Journey Cards Grid */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                            {availableJourneys.map(journey => {
+                                const progress = journeyProgress[journey.id];
+                                const progressPercent = calculateProgressPercent(journey);
+                                const completedSteps = progress?.completedStepIds?.length || 0;
+                                const totalSteps = journey.stepIds?.length || 0;
+                                const isComplete = progressPercent === 100;
+                                const isStarted = progressPercent > 0;
+
+                                return (
+                                    <div
+                                        key={journey.id}
+                                        className="bg-white rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 overflow-hidden cursor-pointer group"
+                                        onClick={() => selectJourney(journey)}
                                     >
-                                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
-                                        </svg>
-                                        Switch to different journey
-                                    </button>
-                                )}
-                            </div>
-                            
-                            <div className="bg-white rounded-xl shadow-lg p-6 border-l-4 border-purple-500">
-                                <div className="flex items-center justify-between mb-2">
-                                    <div className="text-sm font-semibold text-gray-600">Days Active</div>
-                                    <div className="text-3xl">📅</div>
-                                </div>
-                                <div className="text-4xl font-black text-gray-800 mb-2">{daysActive}</div>
-                                <div className="text-sm text-gray-600">Keep the momentum going!</div>
-                            </div>
+                                        {/* Journey Header */}
+                                        <div className="p-6 pb-4">
+                                            <div className="flex items-start justify-between mb-3">
+                                                <h3 className="text-xl font-bold text-gray-800 group-hover:text-indigo-600 transition flex-1">
+                                                    {journey.title}
+                                                </h3>
+                                                {isComplete && (
+                                                    <div className="text-2xl ml-2">🎉</div>
+                                                )}
+                                            </div>
+                                            <p className="text-sm text-gray-600 mb-4 line-clamp-2">
+                                                {journey.description}
+                                            </p>
+
+                                            {/* Progress Bar */}
+                                            <div className="mb-4">
+                                                <div className="flex justify-between items-center mb-2">
+                                                    <span className="text-xs font-semibold text-gray-600">
+                                                        {isComplete ? 'Completed' : isStarted ? 'In Progress' : 'Not Started'}
+                                                    </span>
+                                                    <span className="text-xs font-bold text-indigo-600">
+                                                        {progressPercent}%
+                                                    </span>
+                                                </div>
+                                                <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+                                                    <div
+                                                        className={`h-full transition-all duration-500 ${
+                                                            isComplete
+                                                                ? 'bg-gradient-to-r from-green-400 to-emerald-500'
+                                                                : 'bg-gradient-to-r from-indigo-500 to-purple-500'
+                                                        }`}
+                                                        style={{ width: `${progressPercent}%` }}
+                                                    />
+                                                </div>
+                                            </div>
+
+                                            {/* Stats */}
+                                            <div className="flex items-center gap-4 text-xs text-gray-500 mb-4">
+                                                <span>📚 {completedSteps}/{totalSteps} steps</span>
+                                                {journey.attachments?.length > 0 && (
+                                                    <span>📎 {journey.attachments.length} resources</span>
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        {/* Action Button */}
+                                        <div className="px-6 pb-6">
+                                            <button className={`w-full py-3 rounded-lg font-semibold transition ${
+                                                isComplete
+                                                    ? 'bg-green-500 hover:bg-green-600 text-white'
+                                                    : isStarted
+                                                        ? 'bg-indigo-500 hover:bg-indigo-600 text-white'
+                                                        : 'bg-gray-100 hover:bg-gray-200 text-gray-800'
+                                            }`}>
+                                                {isComplete ? '✓ Review Journey' : isStarted ? 'Continue →' : 'Start Journey →'}
+                                            </button>
+                                        </div>
+                                    </div>
+                                );
+                            })}
                         </div>
-                        
-                        {/* Progress Bar */}
-                        <div className="bg-white rounded-xl shadow-lg p-6 mb-8">
-                            <div className="flex justify-between items-center mb-4">
-                                <h3 className="text-xl font-bold text-gray-800">Your Progress</h3>
-                                <span className="text-2xl font-black text-indigo-600">{progressPercent}%</span>
-                            </div>
-                            <div className="h-4 bg-gray-200 rounded-full overflow-hidden mb-2">
-                                <div 
-                                    className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 transition-all duration-500"
-                                    style={{ width: `${progressPercent}%` }}
-                                />
-                            </div>
-                            <p className="text-sm text-gray-600">
-                                {progressPercent === 100 
-                                    ? "You've completed all steps! Great job!" 
-                                    : `${totalSteps - completedSteps} ${totalSteps - completedSteps === 1 ? 'step' : 'steps'} remaining`}
-                            </p>
-                        </div>
-                        
-                        {/* Action Buttons */}
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <button
-                                onClick={onStartJourney}
-                                className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl p-8 hover:from-indigo-700 hover:to-purple-700 transition shadow-lg transform hover:scale-105"
-                            >
-                                <div className="flex items-center justify-between mb-4">
-                                    <BookOpen className="w-12 h-12" />
-                                    <ChevronRight className="w-8 h-8" />
-                                </div>
-                                <div className="text-2xl font-bold mb-2">
-                                    {progressPercent === 0 ? 'Start Training' : progressPercent === 100 ? 'Review Journey' : 'Continue Training'}
-                                </div>
-                                <div className="text-indigo-100">
-                                    {progressPercent === 100 ? 'Review completed steps' : `Resume from step ${completedSteps + 1}`}
-                                </div>
-                            </button>
-                            
-                            <div className="bg-white rounded-xl p-8 shadow-lg border-2 border-gray-200">
-                                <div className="flex items-center justify-between mb-4">
-                                    <User className="w-12 h-12 text-gray-400" />
-                                </div>
-                                <div className="text-2xl font-bold text-gray-800 mb-2">My Profile</div>
-                                <div className="space-y-2 text-sm text-gray-600">
-                                    <div><strong>Name:</strong> {userProfile.displayName}</div>
-                                    <div><strong>Specialty:</strong> {userProfile.specialty}</div>
-                                    <div><strong>Role:</strong> Student</div>
-                                </div>
-                            </div>
-                        </div>
-                        
-                        {/* Completion Badge */}
-                        {progressPercent === 100 && (
-                            <div className="mt-8 bg-gradient-to-r from-green-400 to-emerald-500 rounded-xl shadow-lg p-8 text-center text-white">
-                                <div className="text-6xl mb-4">🏆</div>
-                                <h3 className="text-3xl font-black mb-2">Training Complete!</h3>
-                                <p className="text-xl">
-                                    You've successfully completed the {journey.title}
-                                </p>
-                            </div>
-                        )}
                     </div>
                 </div>
             );
         }
-        
+
         // ============================================
-        // PATIENT JOURNEY COMPONENT (Same as before, but accessed from dashboard)
+        // JOURNEY VIEW
         // ============================================
-        function PatientJourney({ user, userProfile, selectedJourney, onBackToDashboard }) {
-            const [journey, setJourney] = useState(selectedJourney); // Use passed journey
+        function JourneyView({ user, userProfile, journey, progress, onBack }) {
+            const [steps, setSteps] = useState([]);
             const [loading, setLoading] = useState(true);
             const [activeStep, setActiveStep] = useState(0);
             const [showDetails, setShowDetails] = useState(null);
-            const [completedSteps, setCompletedSteps] = useState([]);
-            const [progress, setProgress] = useState(null);
 
             useEffect(() => {
-                // If we have a selected journey, use it; otherwise load
-                if (selectedJourney) {
-                    loadJourneyDetails(selectedJourney);
-                } else {
-                    loadJourneyAndProgress();
-                }
-            }, [userProfile.specialty]);
-            
-            const loadJourneyDetails = async (journeyData) => {
-                const { doc, getDoc, onSnapshot } = window.firebaseModules;
-                
+                loadJourneySteps();
+            }, [journey.id]);
+
+            const loadJourneySteps = async () => {
+                const { doc, getDoc } = window.firebaseModules;
+
                 try {
-                    // Load steps and tasks for the journey
-                    const stepsPromises = journeyData.stepIds.map(stepId =>
+                    const stepsPromises = journey.stepIds.map(stepId =>
                         getDoc(doc(db, 'steps', stepId))
                     );
                     const stepsDocs = await Promise.all(stepsPromises);
-                    const steps = stepsDocs
+                    const stepsData = stepsDocs
                         .filter(doc => doc.exists())
                         .map(doc => ({ id: doc.id, ...doc.data() }));
-                    
-                    for (let step of steps) {
+
+                    // Load tasks for each step
+                    for (let step of stepsData) {
                         if (step.taskIds && step.taskIds.length > 0) {
                             const tasksPromises = step.taskIds.map(taskId =>
                                 getDoc(doc(db, 'tasks', taskId))
@@ -941,161 +572,30 @@
                             step.tasks = [];
                         }
                     }
-                    
-                    steps.sort((a, b) => a.order - b.order);
-                    journeyData.steps = steps;
-                    setJourney(journeyData);
-                    
-                    // Use journeyId for progress tracking
-                    const progressId = `${user.uid}_${journeyData.id}`;
-                    const progressRef = doc(db, 'userProgress', progressId);
-                    
-                    const unsubscribe = onSnapshot(progressRef, (doc) => {
-                        if (doc.exists()) {
-                            const data = doc.data();
-                            setProgress(data);
-                            setCompletedSteps(data.completedStepIds || []);
-                        } else {
-                            const { setDoc, serverTimestamp } = window.firebaseModules;
-                            setDoc(progressRef, {
-                                userId: user.uid,
-                                journeyId: journeyData.id,
-                                specialty: userProfile.specialty,
-                                totalSteps: journeyData.stepIds?.length || 0,
-                                startedAt: serverTimestamp(),
-                                completedStepIds: [],
-                                status: 'in_progress',
-                                currentStepIndex: 0
-                            });
-                        }
-                    });
-                    
+
+                    stepsData.sort((a, b) => a.order - b.order);
+                    setSteps(stepsData);
                     setLoading(false);
                 } catch (err) {
-                    console.error('Error loading journey details:', err);
+                    console.error('Error loading steps:', err);
                     setLoading(false);
                 }
-            };
-
-            const loadJourneyAndProgress = async () => {
-                const { collection, query, where, getDocs, doc, getDoc, onSnapshot } = window.firebaseModules;
-                
-                try {
-                    const journeysRef = collection(db, 'journeys');
-                    
-                    // Try new format first (array-contains for specialties array)
-                    let q = query(
-                        journeysRef,
-                        where('specialties', 'array-contains', userProfile.specialty),
-                        where('status', '==', 'published')
-                    );
-                    let querySnapshot = await getDocs(q);
-                    
-                    // Backward compatibility: If no results, try old format (single specialty field)
-                    if (querySnapshot.empty) {
-                        q = query(
-                            journeysRef,
-                            where('specialty', '==', userProfile.specialty),
-                            where('status', '==', 'published')
-                        );
-                        querySnapshot = await getDocs(q);
-                    }
-                    
-                    if (!querySnapshot.empty) {
-                        const journeyDoc = querySnapshot.docs[0];
-                        const journeyData = { id: journeyDoc.id, ...journeyDoc.data() };
-                        
-                        const stepsPromises = journeyData.stepIds.map(stepId =>
-                            getDoc(doc(db, 'steps', stepId))
-                        );
-                        const stepsDocs = await Promise.all(stepsPromises);
-                        const steps = stepsDocs
-                            .filter(doc => doc.exists())
-                            .map(doc => ({ id: doc.id, ...doc.data() }));
-                        
-                        for (let step of steps) {
-                            if (step.taskIds && step.taskIds.length > 0) {
-                                const tasksPromises = step.taskIds.map(taskId =>
-                                    getDoc(doc(db, 'tasks', taskId))
-                                );
-                                const tasksDocs = await Promise.all(tasksPromises);
-                                step.tasks = tasksDocs
-                                    .filter(doc => doc.exists())
-                                    .map(doc => ({ id: doc.id, ...doc.data() }))
-                                    .sort((a, b) => a.order - b.order);
-                            } else {
-                                step.tasks = [];
-                            }
-                        }
-                        
-                        steps.sort((a, b) => a.order - b.order);
-                        journeyData.steps = steps;
-                        setJourney(journeyData);
-                    } else {
-                        setJourney({ steps: [] });
-                    }
-                    
-                    const progressId = `${user.uid}_${userProfile.specialty}`;
-                    const progressRef = doc(db, 'userProgress', progressId);
-                    
-                    const unsubscribe = onSnapshot(progressRef, (doc) => {
-                        if (doc.exists()) {
-                            const data = doc.data();
-                            setProgress(data);
-                            setCompletedSteps(data.completedStepIds || []);
-                        } else {
-                            const { setDoc, serverTimestamp } = window.firebaseModules;
-                            setDoc(progressRef, {
-                                userId: user.uid,
-                                journeyId: journeyData.id,
-                                specialty: userProfile.specialty,
-                                totalSteps: journeyData.stepIds?.length || 0,  // Track total steps in journey
-                                startedAt: serverTimestamp(),
-                                completedStepIds: [],
-                                status: 'in_progress',
-                                currentStepIndex: 0
-                            });
-                        }
-                    });
-                    
-                    setLoading(false);
-                    return () => unsubscribe();
-                    
-                } catch (err) {
-                    console.error('Error loading journey:', err);
-                    setLoading(false);
-                }
-            };
-
-            const handleStepClick = (index) => {
-                setActiveStep(index);
-                setShowDetails(index);
             };
 
             const markComplete = async (stepId, index) => {
                 const { doc, updateDoc, arrayUnion, serverTimestamp } = window.firebaseModules;
-                
-                // Use journeyId for progress tracking
+
                 const progressId = `${user.uid}_${journey.id}`;
-                console.log('Marking step complete:', {
-                    stepId,
-                    progressId,
-                    journeyId: journey.id,
-                    userId: user.uid
-                });
-                
                 const progressRef = doc(db, 'userProgress', progressId);
-                
+
                 try {
                     await updateDoc(progressRef, {
                         completedStepIds: arrayUnion(stepId),
                         currentStepIndex: index + 1,
                         lastUpdated: serverTimestamp()
                     });
-                    
-                    console.log('Step marked complete successfully');
-                    
-                    if (index < journey.steps.length - 1) {
+
+                    if (index < steps.length - 1) {
                         setActiveStep(index + 1);
                         setShowDetails(index + 1);
                     }
@@ -1106,12 +606,11 @@
 
             const resetJourney = async () => {
                 if (!confirm('Are you sure you want to reset your progress?')) return;
-                
+
                 const { doc, updateDoc } = window.firebaseModules;
-                // Use journeyId for progress tracking
                 const progressId = `${user.uid}_${journey.id}`;
                 const progressRef = doc(db, 'userProgress', progressId);
-                
+
                 try {
                     await updateDoc(progressRef, {
                         completedStepIds: [],
@@ -1125,279 +624,215 @@
                 }
             };
 
-            const calculateProgress = () => {
-                if (!journey || !journey.steps || journey.steps.length === 0) return 0;
-                return Math.round((completedSteps.length / journey.steps.length) * 100);
-            };
-
-            const handleSignOut = async () => {
-                const { signOut } = window.firebaseModules;
-                await signOut(auth);
-            };
-
             if (loading) {
                 return (
                     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
                         <div className="text-center">
                             <div className="text-6xl mb-4">⏳</div>
-                            <div className="text-xl font-semibold text-gray-600">Loading your journey...</div>
+                            <div className="text-xl font-semibold text-gray-600">Loading journey...</div>
                         </div>
                     </div>
                 );
             }
 
-            if (!journey || !journey.steps || journey.steps.length === 0) {
-                return (
-                    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 p-4">
-                        <div className="bg-white rounded-2xl shadow-xl p-8 max-w-lg text-center">
-                            <div className="text-6xl mb-4">🎓</div>
-                            <h2 className="text-3xl font-bold text-gray-800 mb-2">Journey Content Unavailable</h2>
-                            
-                            <div className="bg-yellow-50 border-2 border-yellow-200 rounded-lg p-6 mb-6">
-                                <div className="text-4xl mb-3">⚠️</div>
-                                <p className="text-gray-700">
-                                    This training journey for <strong className="text-indigo-600">{userProfile.specialty}</strong> has no steps yet.
-                                </p>
-                            </div>
-                            
-                            <p className="text-sm text-gray-600 mb-6">
-                                Your trainer is working on adding content. Please check back later or contact them for updates.
-                            </p>
-                            
-                            <button
-                                onClick={onBackToDashboard}
-                                className="w-full px-6 py-3 bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white font-semibold rounded-lg transition shadow-lg"
-                            >
-                                Back to Dashboard
-                            </button>
-                        </div>
-                    </div>
-                );
-            }
+            const completedStepIds = progress?.completedStepIds || [];
+            const progressPercent = Math.round((completedStepIds.length / steps.length) * 100);
 
             return (
-                <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 p-4 md:p-8">
+                <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
                     {/* Header */}
-                    <div className="max-w-7xl mx-auto mb-8">
-                        <div className="bg-white rounded-2xl shadow-xl p-6 md:p-8 border-4 border-indigo-600">
-                            <div className="flex justify-between items-start mb-4">
-                                <div className="flex-1">
-                                    <button
-                                        onClick={onBackToDashboard}
-                                        className="flex items-center gap-2 text-indigo-600 hover:text-indigo-800 mb-4 font-semibold"
-                                    >
-                                        <Home className="w-5 h-5" />
-                                        Back to Dashboard
-                                    </button>
-                                    <h1 className="text-4xl md:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-purple-600 mb-2">
-                                        {journey.title || 'Your Training Journey'}
-                                    </h1>
-                                    <p className="text-xl text-slate-600 mb-2">
-                                        {userProfile.displayName} • {userProfile.specialty.toUpperCase()}
-                                    </p>
-                                    <p className="text-gray-500">{journey.description}</p>
-                                    
-                                    {/* Journey Attachments/Links */}
-                                    {journey.attachments && journey.attachments.length > 0 && (
-                                        <div className="mt-4">
-                                            <h3 className="text-sm font-semibold text-gray-700 mb-2">📎 Reference Materials:</h3>
-                                            <div className="flex flex-wrap gap-2">
-                                                {journey.attachments.map((link, index) => (
-                                                    <a
-                                                        key={index}
-                                                        href={link.url}
-                                                        target="_blank"
-                                                        rel="noopener noreferrer"
-                                                        className="inline-flex items-center gap-2 px-3 py-2 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 transition text-sm"
-                                                    >
-                                                        <span>🔗</span>
-                                                        <span>{link.name}</span>
-                                                    </a>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
+                    <div className="bg-white shadow-sm border-b border-gray-200">
+                        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+                            <div className="flex justify-between items-center">
                                 <button
-                                    onClick={handleSignOut}
-                                    className="flex items-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition"
+                                    onClick={onBack}
+                                    className="flex items-center gap-2 px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition"
                                 >
-                                    <LogOut className="w-4 h-4" />
-                                    Sign Out
+                                    <ChevronLeft className="w-4 h-4" />
+                                    Back to Dashboard
                                 </button>
-                            </div>
-                            
-                            <div className="flex items-center gap-4 flex-wrap">
-                                <div className="flex-1 min-w-[200px]">
-                                    <div className="flex justify-between text-sm font-semibold text-slate-700 mb-2">
-                                        <span>Progress</span>
-                                        <span>{calculateProgress()}%</span>
-                                    </div>
-                                    <div className="h-4 bg-slate-200 rounded-full overflow-hidden">
-                                        <div 
-                                            className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 transition-all duration-500 ease-out"
-                                            style={{ width: `${calculateProgress()}%` }}
-                                        />
-                                    </div>
+                                <div className="text-center flex-1">
+                                    <h1 className="text-xl font-bold text-gray-800">{journey.title}</h1>
+                                    <p className="text-sm text-gray-600">{completedStepIds.length} of {steps.length} steps completed</p>
                                 </div>
                                 <button
                                     onClick={resetJourney}
-                                    className="px-6 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold rounded-lg transition-colors"
+                                    className="px-4 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg transition"
                                 >
-                                    Reset Progress
+                                    Reset
                                 </button>
                             </div>
                         </div>
                     </div>
 
-                    {/* Journey Steps - KEEPING THE SAME IMPLEMENTATION AS BEFORE */}
-                    <div className="max-w-7xl mx-auto">
-                        <div className="grid gap-6 mb-8">
-                            {journey.steps.map((step, index) => {
-                                const isCompleted = completedSteps.includes(step.id);
-                                const isActive = activeStep === index;
-                                const isExpanded = showDetails === index;
-                                
+                    {/* Content */}
+                    <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+                        {/* Progress Bar */}
+                        <div className="bg-white rounded-xl shadow-lg p-6 mb-8">
+                            <div className="flex justify-between items-center mb-2">
+                                <span className="text-sm font-semibold text-gray-600">Overall Progress</span>
+                                <span className="text-2xl font-bold text-indigo-600">{progressPercent}%</span>
+                            </div>
+                            <div className="h-3 bg-gray-200 rounded-full overflow-hidden">
+                                <div
+                                    className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 transition-all duration-500"
+                                    style={{ width: `${progressPercent}%` }}
+                                />
+                            </div>
+                        </div>
+
+                        {/* Steps */}
+                        <div className="space-y-4">
+                            {steps.map((step, index) => {
+                                const isCompleted = completedStepIds.includes(step.id);
+                                const isActive = index === activeStep;
+                                const canAccess = index === 0 || completedStepIds.includes(steps[index - 1]?.id);
+
                                 return (
-                                    <div key={step.id} className="relative">
-                                        {index < journey.steps.length - 1 && (
-                                            <div className="absolute left-8 top-20 w-1 h-16 bg-gradient-to-b from-slate-300 to-slate-200 z-0" />
-                                        )}
-                                        
+                                    <div
+                                        key={step.id}
+                                        className={`bg-white rounded-xl shadow-lg overflow-hidden transition-all ${
+                                            isActive ? 'ring-2 ring-indigo-500' : ''
+                                        }`}
+                                    >
                                         <div
-                                            onClick={() => handleStepClick(index)}
-                                            className={`relative z-10 bg-white rounded-2xl shadow-lg transition-all duration-300 cursor-pointer ${
-                                                isActive ? 'ring-4 ring-indigo-400 shadow-2xl scale-[1.02]' : 'hover:shadow-xl hover:scale-[1.01]'
-                                            } ${isCompleted ? 'opacity-75' : ''}`}
+                                            className={`p-6 cursor-pointer ${
+                                                !canAccess ? 'opacity-50 cursor-not-allowed' : ''
+                                            }`}
+                                            onClick={() => canAccess && setShowDetails(showDetails === index ? null : index)}
                                         >
-                                            <div className="p-6">
-                                                <div className="flex items-center gap-4">
-                                                    <div className={`relative flex-shrink-0 w-16 h-16 rounded-xl flex items-center justify-center bg-gradient-to-br ${step.color || 'from-gray-400 to-gray-600'} shadow-lg`}>
+                                            <div className="flex items-start justify-between">
+                                                <div className="flex items-start gap-4 flex-1">
+                                                    <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
+                                                        isCompleted
+                                                            ? 'bg-green-500'
+                                                            : isActive
+                                                                ? 'bg-indigo-500'
+                                                                : 'bg-gray-300'
+                                                    }`}>
                                                         {isCompleted ? (
-                                                            <Check className="w-8 h-8 text-white" />
+                                                            <CheckCircle className="w-5 h-5 text-white" />
                                                         ) : (
-                                                            <span className="text-3xl">{step.icon || '📌'}</span>
+                                                            <span className="text-white font-bold text-sm">{index + 1}</span>
                                                         )}
-                                                        <div className="absolute -top-2 -right-2 w-8 h-8 bg-white rounded-full flex items-center justify-center font-black text-sm text-slate-700 shadow-md border-2 border-slate-200">
-                                                            {index + 1}
-                                                        </div>
                                                     </div>
-
                                                     <div className="flex-1">
-                                                        <div className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-1">
-                                                            {step.phase}
+                                                        <h3 className="text-lg font-bold text-gray-800 mb-1">{step.title}</h3>
+                                                        <p className="text-sm text-gray-600">{step.description}</p>
+                                                        <div className="mt-2 text-xs text-gray-500">
+                                                            {step.tasks?.length || 0} tasks
                                                         </div>
-                                                        <h3 className="text-2xl font-black text-slate-800">
-                                                            {step.title}
-                                                        </h3>
-                                                    </div>
-
-                                                    <div className={`transform transition-transform ${isExpanded ? 'rotate-90' : ''}`}>
-                                                        <ChevronRight className="w-6 h-6 text-slate-400" />
                                                     </div>
                                                 </div>
+                                                <ChevronRight className={`w-5 h-5 text-gray-400 transition-transform ${
+                                                    showDetails === index ? 'rotate-90' : ''
+                                                }`} />
                                             </div>
-
-                                            {isExpanded && (
-                                                <div className="border-t border-slate-200 p-6 bg-gradient-to-br from-slate-50 to-white">
-                                                    {step.tasks && step.tasks.length > 0 && (
-                                                        <div className="mb-6">
-                                                            <h4 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
-                                                                <span className={`w-2 h-2 rounded-full bg-gradient-to-r ${step.color || 'from-gray-400 to-gray-600'}`} />
-                                                                Tasks to Complete
-                                                            </h4>
-                                                            <div className="space-y-3">
-                                                                {step.tasks.map((task, taskIndex) => (
-                                                                    <div 
-                                                                        key={task.id}
-                                                                        className="bg-white rounded-lg p-4 border-2 border-slate-200 hover:border-indigo-300 transition-colors"
-                                                                    >
-                                                                        <div className="flex items-start gap-3">
-                                                                            <div className="flex-shrink-0 w-6 h-6 rounded-full bg-gradient-to-br from-indigo-100 to-purple-100 flex items-center justify-center text-xs font-bold text-indigo-700">
-                                                                                {taskIndex + 1}
-                                                                            </div>
-                                                                            <div className="flex-1">
-                                                                                <div className="font-bold text-slate-800 mb-1">
-                                                                                    {task.action}
-                                                                                </div>
-                                                                                <div className="text-sm font-mono bg-indigo-50 text-indigo-700 px-3 py-1 rounded inline-block mb-1">
-                                                                                    {task.accuroNavigation}
-                                                                                </div>
-                                                                                <div className="text-xs text-slate-500">
-                                                                                    ⏱️ Est. time: {task.estimatedTime}
-                                                                                </div>
-                                                                                {task.screenshotUrl && (
-                                                                                    <div className="mt-2">
-                                                                                        <a
-                                                                                            href={task.screenshotUrl}
-                                                                                            target="_blank"
-                                                                                            rel="noopener noreferrer"
-                                                                                            className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline"
-                                                                                        >
-                                                                                            <span>📸</span>
-                                                                                            <span>View screenshot</span>
-                                                                                        </a>
-                                                                                    </div>
-                                                                                )}
-                                                                            </div>
-                                                                        </div>
-                                                                    </div>
-                                                                ))}
-                                                            </div>
-                                                        </div>
-                                                    )}
-
-                                                    <div className="grid md:grid-cols-2 gap-4 mb-6">
-                                                        <div className="bg-green-50 border-2 border-green-200 rounded-lg p-4">
-                                                            <div className="text-xs font-bold text-green-600 uppercase tracking-wider mb-2">
-                                                                Expected Outcome
-                                                            </div>
-                                                            <div className="text-sm font-semibold text-green-800">
-                                                                ✓ {step.outcome}
-                                                            </div>
-                                                        </div>
-                                                        <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-4">
-                                                            <div className="text-xs font-bold text-blue-600 uppercase tracking-wider mb-2">
-                                                                Next Action
-                                                            </div>
-                                                            <div className="text-sm font-semibold text-blue-800">
-                                                                → {step.nextAction}
-                                                            </div>
-                                                        </div>
-                                                    </div>
-
-                                                    <button
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            markComplete(step.id, index);
-                                                        }}
-                                                        disabled={isCompleted}
-                                                        className={`w-full py-4 rounded-xl font-bold text-lg transition-all transform ${
-                                                            isCompleted 
-                                                                ? 'bg-green-100 text-green-700 cursor-not-allowed' 
-                                                                : `bg-gradient-to-r ${step.color || 'from-gray-400 to-gray-600'} text-white hover:shadow-lg hover:scale-[1.02] active:scale-95`
-                                                        }`}
-                                                    >
-                                                        {isCompleted ? '✓ Step Completed' : 'Mark as Complete'}
-                                                    </button>
-                                                </div>
-                                            )}
                                         </div>
+
+                                        {/* Step Details */}
+                                        {showDetails === index && canAccess && (
+                                            <div className="px-6 pb-6 border-t border-gray-200 pt-4">
+                                                {step.tasks && step.tasks.length > 0 ? (
+                                                    <div className="space-y-3">
+                                                        {step.tasks.map((task, taskIndex) => (
+                                                            <div key={task.id} className="bg-gray-50 rounded-lg p-4">
+                                                                <div className="flex items-start gap-3">
+                                                                    <span className="text-indigo-600 font-bold text-sm">{taskIndex + 1}.</span>
+                                                                    <div className="flex-1">
+                                                                        <p className="font-semibold text-gray-800 mb-1">{task.action}</p>
+                                                                        {task.accuroNavigation && (
+                                                                            <p className="text-sm text-gray-600 font-mono bg-white px-2 py-1 rounded mb-2">
+                                                                                {task.accuroNavigation}
+                                                                            </p>
+                                                                        )}
+                                                                        {task.estimatedTime && (
+                                                                            <p className="text-xs text-gray-500">⏱️ {task.estimatedTime}</p>
+                                                                        )}
+                                                                        {/* Multiple Screenshot URLs */}
+                                                                        {task.screenshotUrls && task.screenshotUrls.length > 0 && (
+                                                                            <div className="mt-2 space-y-1">
+                                                                                {task.screenshotUrls.filter(url => url).map((url, i) => (
+                                                                                    <a
+                                                                                        key={i}
+                                                                                        href={url}
+                                                                                        target="_blank"
+                                                                                        rel="noopener noreferrer"
+                                                                                        className="block text-xs text-blue-600 hover:underline"
+                                                                                    >
+                                                                                        🔗 Screenshot {task.screenshotUrls.filter(u => u).length > 1 ? `#${i + 1}` : ''}
+                                                                                    </a>
+                                                                                ))}
+                                                                            </div>
+                                                                        )}
+                                                                        {/* Backward compatibility for single URL */}
+                                                                        {task.screenshotUrl && !task.screenshotUrls && (
+                                                                            <a
+                                                                                href={task.screenshotUrl}
+                                                                                target="_blank"
+                                                                                rel="noopener noreferrer"
+                                                                                className="block text-xs text-blue-600 hover:underline mt-2"
+                                                                            >
+                                                                                🔗 Screenshot
+                                                                            </a>
+                                                                        )}
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                ) : (
+                                                    <p className="text-sm text-gray-500">No tasks for this step</p>
+                                                )}
+
+                                                {/* Mark Complete Button */}
+                                                {!isCompleted && (
+                                                    <button
+                                                        onClick={() => markComplete(step.id, index)}
+                                                        className="mt-4 w-full bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white font-semibold py-3 rounded-lg transition"
+                                                    >
+                                                        Mark as Complete
+                                                    </button>
+                                                )}
+                                            </div>
+                                        )}
                                     </div>
                                 );
                             })}
                         </div>
 
-                        {completedSteps.length === journey.steps.length && (
-                            <div className="bg-gradient-to-r from-green-400 to-emerald-500 rounded-2xl shadow-2xl p-8 text-center text-white">
-                                <div className="text-6xl mb-4">🎉</div>
-                                <h2 className="text-4xl font-black mb-4">Congratulations!</h2>
+                        {/* Reference Materials */}
+                        {journey.attachments && journey.attachments.length > 0 && (
+                            <div className="mt-8 bg-white rounded-xl shadow-lg p-6">
+                                <h3 className="text-lg font-bold text-gray-800 mb-4">📎 Reference Materials</h3>
+                                <div className="space-y-2">
+                                    {journey.attachments.map((link, index) => (
+                                        <a
+                                            key={index}
+                                            href={link.url}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="flex items-center gap-2 text-sm text-indigo-600 hover:text-indigo-800 hover:underline p-2 hover:bg-indigo-50 rounded transition"
+                                        >
+                                            <span>🔗</span>
+                                            <span className="flex-1">{link.name}</span>
+                                        </a>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Completion Message */}
+                        {progressPercent === 100 && (
+                            <div className="mt-8 bg-gradient-to-r from-green-400 to-emerald-500 rounded-xl shadow-lg p-8 text-center text-white">
+                                <div className="text-6xl mb-4">🏆</div>
+                                <h3 className="text-3xl font-black mb-2">Journey Complete!</h3>
                                 <p className="text-xl mb-6">
-                                    You've completed the {userProfile.specialty} training journey!
+                                    Congratulations! You've completed the {journey.title}
                                 </p>
                                 <div className="flex gap-4 justify-center">
                                     <button
-                                        onClick={onBackToDashboard}
+                                        onClick={onBack}
                                         className="bg-white text-green-600 px-8 py-4 rounded-xl font-bold text-lg hover:bg-green-50 transition-colors shadow-lg"
                                     >
                                         Back to Dashboard
@@ -1415,36 +850,39 @@
                 </div>
             );
         }
-        
+
         // ============================================
-        // MAIN APP COMPONENT
+        // MAIN APP
         // ============================================
         function App() {
             const [user, setUser] = useState(null);
             const [userProfile, setUserProfile] = useState(null);
             const [loading, setLoading] = useState(true);
-            const [currentView, setCurrentView] = useState('dashboard'); // 'dashboard' or 'journey'
-            const [selectedJourney, setSelectedJourney] = useState(null); // Lift journey state here
-            const [selectedProgress, setSelectedProgress] = useState(null); // Lift progress state here
 
             useEffect(() => {
                 const { onAuthStateChanged } = window.firebaseModules;
-                
+
                 const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
                     if (firebaseUser) {
                         setUser(firebaseUser);
-                        
+
                         const { doc, getDoc } = window.firebaseModules;
                         const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
-                        
+
                         if (userDoc.exists()) {
-                            setUserProfile(userDoc.data());
+                            const userData = userDoc.data();
+                            // Only allow students
+                            if (userData.role === 'student') {
+                                setUserProfile(userData);
+                            } else {
+                                alert('Access denied. This is the student portal.');
+                                const { signOut } = window.firebaseModules;
+                                await signOut(auth);
+                            }
                         }
                     } else {
                         setUser(null);
                         setUserProfile(null);
-                        setSelectedJourney(null); // Reset on logout
-                        setSelectedProgress(null);
                     }
                     setLoading(false);
                 });
@@ -1460,36 +898,14 @@
                 );
             }
 
-            if (!user) {
-                return <LoginPage onLogin={() => {}} />;
+            if (!user || !userProfile) {
+                return <LoginPage />;
             }
 
-            if (!userProfile) {
-                return <SpecialtySelector user={user} onComplete={() => window.location.reload()} />;
-            }
-
-            // Students see dashboard first, then can navigate to journey
-            if (currentView === 'dashboard') {
-                return <StudentDashboard 
-                    user={user} 
-                    userProfile={userProfile}
-                    selectedJourney={selectedJourney}
-                    setSelectedJourney={setSelectedJourney}
-                    selectedProgress={selectedProgress}
-                    setSelectedProgress={setSelectedProgress}
-                    onStartJourney={() => setCurrentView('journey')} 
-                />;
-            } else {
-                return <PatientJourney 
-                    user={user} 
-                    userProfile={userProfile}
-                    selectedJourney={selectedJourney}
-                    onBackToDashboard={() => setCurrentView('dashboard')} 
-                />;
-            }
+            return <StudentDashboard user={user} userProfile={userProfile} />;
         }
 
-        // Render app
+        // Render
         const root = ReactDOM.createRoot(document.getElementById('root'));
         root.render(<App />);
     </script>

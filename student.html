@@ -274,6 +274,7 @@
             const [loading, setLoading] = useState(true);
             const [currentView, setCurrentView] = useState('dashboard'); // 'dashboard' or 'journey'
             const [selectedJourney, setSelectedJourney] = useState(null);
+            const [activeTab, setActiveTab] = useState('active'); // 'active', 'completed', or 'all'
 
             useEffect(() => {
                 loadAllJourneys();
@@ -445,14 +446,73 @@
                             <h2 className="text-3xl font-black text-gray-800 mb-2">
                                 Welcome back, {userProfile.displayName.split(' ')[0]}! 👋
                             </h2>
-                            <p className="text-gray-600">
+                            <p className="text-gray-600 mb-4">
                                 You have {availableJourneys.length} training {availableJourneys.length === 1 ? 'journey' : 'journeys'} available
                             </p>
+                            
+                            {/* Tabs */}
+                            <div className="flex gap-2 border-b border-gray-200">
+                                <button
+                                    onClick={() => setActiveTab('active')}
+                                    className={`px-6 py-3 font-semibold transition-all ${
+                                        activeTab === 'active'
+                                            ? 'border-b-2 border-indigo-600 text-indigo-600'
+                                            : 'text-gray-600 hover:text-gray-800'
+                                    }`}
+                                >
+                                    Active ({availableJourneys.filter(j => {
+                                        const percent = calculateProgressPercent(j);
+                                        return percent > 0 && percent < 100;
+                                    }).length})
+                                </button>
+                                <button
+                                    onClick={() => setActiveTab('not-started')}
+                                    className={`px-6 py-3 font-semibold transition-all ${
+                                        activeTab === 'not-started'
+                                            ? 'border-b-2 border-indigo-600 text-indigo-600'
+                                            : 'text-gray-600 hover:text-gray-800'
+                                    }`}
+                                >
+                                    Not Started ({availableJourneys.filter(j => calculateProgressPercent(j) === 0).length})
+                                </button>
+                                <button
+                                    onClick={() => setActiveTab('completed')}
+                                    className={`px-6 py-3 font-semibold transition-all ${
+                                        activeTab === 'completed'
+                                            ? 'border-b-2 border-green-600 text-green-600'
+                                            : 'text-gray-600 hover:text-gray-800'
+                                    }`}
+                                >
+                                    Completed ({availableJourneys.filter(j => calculateProgressPercent(j) === 100).length})
+                                </button>
+                                <button
+                                    onClick={() => setActiveTab('all')}
+                                    className={`px-6 py-3 font-semibold transition-all ${
+                                        activeTab === 'all'
+                                            ? 'border-b-2 border-indigo-600 text-indigo-600'
+                                            : 'text-gray-600 hover:text-gray-800'
+                                    }`}
+                                >
+                                    All ({availableJourneys.length})
+                                </button>
+                            </div>
                         </div>
 
                         {/* Journey Cards Grid */}
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                            {availableJourneys.map(journey => {
+                            {availableJourneys
+                                .filter(journey => {
+                                    const progressPercent = calculateProgressPercent(journey);
+                                    if (activeTab === 'active') {
+                                        return progressPercent > 0 && progressPercent < 100;
+                                    } else if (activeTab === 'not-started') {
+                                        return progressPercent === 0;
+                                    } else if (activeTab === 'completed') {
+                                        return progressPercent === 100;
+                                    }
+                                    return true; // 'all' tab
+                                })
+                                .map(journey => {
                                 const progress = journeyProgress[journey.id];
                                 const progressPercent = calculateProgressPercent(journey);
                                 const completedSteps = progress?.completedStepIds?.length || 0;
@@ -527,6 +587,40 @@
                                 );
                             })}
                         </div>
+                        
+                        {/* Empty State */}
+                        {availableJourneys.filter(journey => {
+                            const progressPercent = calculateProgressPercent(journey);
+                            if (activeTab === 'active') {
+                                return progressPercent > 0 && progressPercent < 100;
+                            } else if (activeTab === 'not-started') {
+                                return progressPercent === 0;
+                            } else if (activeTab === 'completed') {
+                                return progressPercent === 100;
+                            }
+                            return true;
+                        }).length === 0 && (
+                            <div className="text-center py-16 bg-white rounded-xl shadow-lg">
+                                <div className="text-6xl mb-4">
+                                    {activeTab === 'active' && '🚀'}
+                                    {activeTab === 'not-started' && '📚'}
+                                    {activeTab === 'completed' && '🎉'}
+                                    {activeTab === 'all' && '📖'}
+                                </div>
+                                <h3 className="text-2xl font-bold text-gray-800 mb-2">
+                                    {activeTab === 'active' && 'No Active Training'}
+                                    {activeTab === 'not-started' && 'All Journeys Started'}
+                                    {activeTab === 'completed' && 'No Completed Journeys Yet'}
+                                    {activeTab === 'all' && 'No Training Available'}
+                                </h3>
+                                <p className="text-gray-600">
+                                    {activeTab === 'active' && 'Start a new journey or complete your current ones!'}
+                                    {activeTab === 'not-started' && 'Great job! You\'ve started all available training.'}
+                                    {activeTab === 'completed' && 'Complete your active journeys to see them here.'}
+                                    {activeTab === 'all' && 'Your trainer will publish training journeys soon.'}
+                                </p>
+                            </div>
+                        )}
                     </div>
                 </div>
             );

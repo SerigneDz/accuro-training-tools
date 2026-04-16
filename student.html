@@ -843,22 +843,97 @@
                                                                         {task.estimatedTime && (
                                                                             <p className="text-xs text-gray-500">⏱️ {task.estimatedTime}</p>
                                                                         )}
-                                                                        {/* Multiple Screenshot URLs */}
+                                                                        
+                                                                        {/* Media URLs (Screenshots & Videos) */}
                                                                         {task.screenshotUrls && task.screenshotUrls.length > 0 && (
-                                                                            <div className="mt-2 space-y-1">
-                                                                                {task.screenshotUrls.filter(url => url).map((url, i) => (
-                                                                                    <a
-                                                                                        key={i}
-                                                                                        href={url}
-                                                                                        target="_blank"
-                                                                                        rel="noopener noreferrer"
-                                                                                        className="block text-xs text-blue-600 hover:underline"
-                                                                                    >
-                                                                                        🔗 Screenshot {task.screenshotUrls.filter(u => u).length > 1 ? `#${i + 1}` : ''}
-                                                                                    </a>
-                                                                                ))}
+                                                                            <div className="mt-3 space-y-3">
+                                                                                {task.screenshotUrls.filter(url => url).map((url, i) => {
+                                                                                    // Detect if it's a video
+                                                                                    const isYouTube = url.includes('youtube.com') || url.includes('youtu.be');
+                                                                                    const isVimeo = url.includes('vimeo.com');
+                                                                                    const isLoom = url.includes('loom.com');
+                                                                                    const isScribe = url.includes('scribehow.com');
+                                                                                    const isIframe = url.includes('iframe') || url.includes('<iframe');
+                                                                                    const isVideo = isYouTube || isVimeo || isLoom || isScribe || isIframe;
+                                                                                    
+                                                                                    // Extract embed URL
+                                                                                    let embedUrl = url;
+                                                                                    
+                                                                                    // YouTube
+                                                                                    if (isYouTube) {
+                                                                                        if (url.includes('youtube.com/watch?v=')) {
+                                                                                            const videoId = url.split('v=')[1]?.split('&')[0];
+                                                                                            embedUrl = `https://www.youtube.com/embed/${videoId}`;
+                                                                                        } else if (url.includes('youtu.be/')) {
+                                                                                            const videoId = url.split('youtu.be/')[1]?.split('?')[0];
+                                                                                            embedUrl = `https://www.youtube.com/embed/${videoId}`;
+                                                                                        }
+                                                                                    }
+                                                                                    
+                                                                                    // Vimeo
+                                                                                    if (isVimeo && !url.includes('/video/')) {
+                                                                                        const videoId = url.split('vimeo.com/')[1]?.split('?')[0];
+                                                                                        embedUrl = `https://player.vimeo.com/video/${videoId}`;
+                                                                                    }
+                                                                                    
+                                                                                    // Loom
+                                                                                    if (isLoom && url.includes('/share/')) {
+                                                                                        const videoId = url.split('/share/')[1]?.split('?')[0];
+                                                                                        embedUrl = `https://www.loom.com/embed/${videoId}`;
+                                                                                    }
+                                                                                    
+                                                                                    // Scribe - extract from iframe if needed
+                                                                                    if (isScribe && isIframe) {
+                                                                                        const srcMatch = url.match(/src="([^"]+)"/);
+                                                                                        if (srcMatch) embedUrl = srcMatch[1];
+                                                                                    }
+                                                                                    
+                                                                                    // Generic iframe extraction
+                                                                                    if (isIframe && url.includes('src=')) {
+                                                                                        const srcMatch = url.match(/src="([^"]+)"/);
+                                                                                        if (srcMatch) embedUrl = srcMatch[1];
+                                                                                    }
+                                                                                    
+                                                                                    return (
+                                                                                        <div key={i}>
+                                                                                            {isVideo ? (
+                                                                                                // Video embed
+                                                                                                <div className="bg-white rounded-lg overflow-hidden border-2 border-gray-200">
+                                                                                                    <div className="bg-gradient-to-r from-indigo-500 to-purple-500 px-3 py-2 flex items-center gap-2">
+                                                                                                        <span className="text-white text-sm">🎬</span>
+                                                                                                        <span className="text-white text-xs font-semibold">
+                                                                                                            Video Tutorial {task.screenshotUrls.filter(u => u).length > 1 ? `#${i + 1}` : ''}
+                                                                                                        </span>
+                                                                                                    </div>
+                                                                                                    <div className="relative" style={{ paddingBottom: '56.25%', height: 0 }}>
+                                                                                                        <iframe
+                                                                                                            src={embedUrl}
+                                                                                                            className="absolute top-0 left-0 w-full h-full"
+                                                                                                            frameBorder="0"
+                                                                                                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                                                                                            allowFullScreen
+                                                                                                            title={`Video Tutorial ${i + 1}`}
+                                                                                                        />
+                                                                                                    </div>
+                                                                                                </div>
+                                                                                            ) : (
+                                                                                                // Regular screenshot link
+                                                                                                <a
+                                                                                                    href={url}
+                                                                                                    target="_blank"
+                                                                                                    rel="noopener noreferrer"
+                                                                                                    className="flex items-center gap-2 text-xs text-blue-600 hover:underline bg-blue-50 px-3 py-2 rounded"
+                                                                                                >
+                                                                                                    <span>📸</span>
+                                                                                                    <span>Screenshot {task.screenshotUrls.filter(u => u).length > 1 ? `#${i + 1}` : ''} - Click to view</span>
+                                                                                                </a>
+                                                                                            )}
+                                                                                        </div>
+                                                                                    );
+                                                                                })}
                                                                             </div>
                                                                         )}
+                                                                        
                                                                         {/* Backward compatibility for single URL */}
                                                                         {task.screenshotUrl && !task.screenshotUrls && (
                                                                             <a

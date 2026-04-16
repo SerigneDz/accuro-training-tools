@@ -1374,12 +1374,12 @@
                                             placeholder="Est. time (e.g., '2 min')"
                                         />
                                         
-                                        {/* Screenshot URLs */}
+                                        {/* Media URLs (Screenshots & Videos) */}
                                         <div className="border-2 border-gray-300 rounded-lg p-3">
                                             <div className="flex items-center justify-between mb-2">
                                                 <div className="flex items-center gap-2">
-                                                    <span className="text-lg">🔗</span>
-                                                    <label className="text-xs font-semibold text-gray-700">Screenshot URLs (optional)</label>
+                                                    <span className="text-lg">🎥</span>
+                                                    <label className="text-xs font-semibold text-gray-700">Screenshots & Videos (optional)</label>
                                                 </div>
                                                 <button
                                                     type="button"
@@ -1389,41 +1389,70 @@
                                                     }}
                                                     className="text-xs px-2 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 transition flex items-center gap-1"
                                                 >
-                                                    <span>+</span> Add URL
+                                                    <span>+</span> Add Media
                                                 </button>
+                                            </div>
+                                            
+                                            <div className="mb-2 bg-blue-50 border border-blue-200 rounded p-2">
+                                                <p className="text-xs text-blue-800">
+                                                    <strong>📸 Images:</strong> Direct image links, Imgur, Google Drive<br/>
+                                                    <strong>🎬 Videos:</strong> YouTube, Vimeo, Loom, Scribe embed URLs
+                                                </p>
                                             </div>
                                             
                                             {/* Handle both old single URL and new multiple URLs */}
                                             {(() => {
                                                 const screenshots = task.screenshotUrls || (task.screenshotUrl ? [task.screenshotUrl] : ['']);
-                                                return screenshots.map((url, urlIndex) => (
-                                                    <div key={urlIndex} className="flex gap-2 mb-2">
-                                                        <input
-                                                            type="url"
-                                                            value={url}
-                                                            onChange={(e) => {
-                                                                const newUrls = [...screenshots];
-                                                                newUrls[urlIndex] = e.target.value;
-                                                                updateTask(index, 'screenshotUrls', newUrls);
-                                                            }}
-                                                            className="flex-1 px-2 py-1 text-xs border border-gray-300 rounded focus:border-blue-500 focus:outline-none"
-                                                            placeholder="https://imgur.com/... or Google Drive link"
-                                                        />
-                                                        {screenshots.length > 1 && (
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => {
-                                                                    const newUrls = screenshots.filter((_, i) => i !== urlIndex);
-                                                                    updateTask(index, 'screenshotUrls', newUrls);
-                                                                }}
-                                                                className="px-2 py-1 text-red-600 hover:bg-red-50 rounded transition text-xs"
-                                                                title="Remove URL"
-                                                            >
-                                                                ✕
-                                                            </button>
-                                                        )}
-                                                    </div>
-                                                ));
+                                                return screenshots.map((url, urlIndex) => {
+                                                    // Detect media type
+                                                    const isVideo = url && (
+                                                        url.includes('youtube.com') || 
+                                                        url.includes('youtu.be') ||
+                                                        url.includes('vimeo.com') ||
+                                                        url.includes('loom.com') ||
+                                                        url.includes('scribehow.com') ||
+                                                        url.includes('iframe') ||
+                                                        url.includes('embed')
+                                                    );
+                                                    const mediaIcon = isVideo ? '🎬' : '📸';
+                                                    const mediaLabel = isVideo ? 'Video' : 'Image';
+                                                    
+                                                    return (
+                                                        <div key={urlIndex} className="mb-3">
+                                                            <div className="flex gap-2 mb-1">
+                                                                <input
+                                                                    type="text"
+                                                                    value={url}
+                                                                    onChange={(e) => {
+                                                                        const newUrls = [...screenshots];
+                                                                        newUrls[urlIndex] = e.target.value;
+                                                                        updateTask(index, 'screenshotUrls', newUrls);
+                                                                    }}
+                                                                    className="flex-1 px-2 py-1 text-xs border border-gray-300 rounded focus:border-blue-500 focus:outline-none"
+                                                                    placeholder="Image URL or Video embed code (YouTube, Loom, Scribe, etc.)"
+                                                                />
+                                                                {screenshots.length > 1 && (
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => {
+                                                                            const newUrls = screenshots.filter((_, i) => i !== urlIndex);
+                                                                            updateTask(index, 'screenshotUrls', newUrls);
+                                                                        }}
+                                                                        className="px-2 py-1 text-red-600 hover:bg-red-50 rounded transition text-xs"
+                                                                        title="Remove URL"
+                                                                    >
+                                                                        ✕
+                                                                    </button>
+                                                                )}
+                                                            </div>
+                                                            {url && (
+                                                                <div className="text-xs text-gray-600 ml-1">
+                                                                    {mediaIcon} Detected: <span className="font-semibold">{mediaLabel}</span>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    );
+                                                });
                                             })()}
                                             
                                             {/* Show preview links */}
@@ -1432,17 +1461,29 @@
                                                 const validUrls = screenshots.filter(url => url && url.trim());
                                                 return validUrls.length > 0 && (
                                                     <div className="mt-2 pt-2 border-t border-gray-200">
-                                                        {validUrls.map((url, i) => (
-                                                            <a
-                                                                key={i}
-                                                                href={url}
-                                                                target="_blank"
-                                                                rel="noopener noreferrer"
-                                                                className="text-xs text-blue-600 hover:underline block"
-                                                            >
-                                                                🔗 Screenshot {validUrls.length > 1 ? `#${i + 1}` : ''} - Open in new tab
-                                                            </a>
-                                                        ))}
+                                                        {validUrls.map((url, i) => {
+                                                            const isVideo = url.includes('youtube.com') || 
+                                                                url.includes('youtu.be') ||
+                                                                url.includes('vimeo.com') ||
+                                                                url.includes('loom.com') ||
+                                                                url.includes('scribehow.com') ||
+                                                                url.includes('iframe') ||
+                                                                url.includes('embed');
+                                                            const icon = isVideo ? '🎬' : '📸';
+                                                            const label = isVideo ? 'Video' : 'Screenshot';
+                                                            
+                                                            return (
+                                                                <a
+                                                                    key={i}
+                                                                    href={url}
+                                                                    target="_blank"
+                                                                    rel="noopener noreferrer"
+                                                                    className="text-xs text-blue-600 hover:underline block"
+                                                                >
+                                                                    {icon} {label} {validUrls.length > 1 ? `#${i + 1}` : ''} - Preview
+                                                                </a>
+                                                            );
+                                                        })}
                                                     </div>
                                                 );
                                             })()}

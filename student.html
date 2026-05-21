@@ -272,7 +272,7 @@
             const [availableJourneys, setAvailableJourneys] = useState([]);
             const [journeyProgress, setJourneyProgress] = useState({});
             const [loading, setLoading] = useState(true);
-            const [currentView, setCurrentView] = useState('dashboard'); // 'dashboard' or 'journey'
+            const [currentView, setCurrentView] = useState('dashboard'); // 'dashboard', 'journey', or 'quizgames'
             const [selectedJourney, setSelectedJourney] = useState(null);
             const [activeTab, setActiveTab] = useState('active'); // 'active', 'completed', or 'all'
 
@@ -374,6 +374,17 @@
                 );
             }
 
+            // Show quiz games view
+            if (currentView === 'quizgames') {
+                return (
+                    <QuizGameView
+                        user={user}
+                        userProfile={userProfile}
+                        onBack={() => setCurrentView('dashboard')}
+                    />
+                );
+            }
+            
             // Show journey view
             if (currentView === 'journey' && selectedJourney) {
                 return (
@@ -428,13 +439,22 @@
                                     <h1 className="text-2xl font-bold text-gray-800">Accuro Training</h1>
                                     <p className="text-sm text-gray-600">{userProfile.displayName} • {userProfile.specialty.toUpperCase()}</p>
                                 </div>
-                                <button
-                                    onClick={handleSignOut}
-                                    className="flex items-center gap-2 px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition"
-                                >
-                                    <LogOut className="w-4 h-4" />
-                                    Sign Out
-                                </button>
+                                <div className="flex items-center gap-2">
+                                    <button
+                                        onClick={() => setCurrentView('quizgames')}
+                                        className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-600 hover:from-purple-600 hover:to-pink-700 text-white rounded-lg transition font-semibold"
+                                    >
+                                        <span>🎮</span>
+                                        Quiz Games
+                                    </button>
+                                    <button
+                                        onClick={handleSignOut}
+                                        className="flex items-center gap-2 px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition"
+                                    >
+                                        <LogOut className="w-4 h-4" />
+                                        Sign Out
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -626,6 +646,364 @@
             );
         }
 
+        // ============================================
+        // QUIZ GAME VIEW - Student Side
+        // ============================================
+        function QuizGameView({ user, userProfile, onBack }) {
+            const [activeGames, setActiveGames] = useState([]);
+            const [loading, setLoading] = useState(true);
+            const [currentView, setCurrentView] = useState('lobby'); // 'lobby' or 'playing'
+            const [selectedGame, setSelectedGame] = useState(null);
+            const [currentQuestion, setCurrentQuestion] = useState(0);
+            const [questions, setQuestions] = useState([]);
+            const [userAnswers, setUserAnswers] = useState([]);
+            const [roundComplete, setRoundComplete] = useState(false);
+            
+            useEffect(() => {
+                loadActiveGames();
+            }, []);
+            
+            const loadActiveGames = async () => {
+                const { collection, query, where, getDocs } = window.firebaseModules;
+                
+                try {
+                    const q = query(collection(db, 'quizGames'), where('status', '==', 'active'));
+                    const querySnapshot = await getDocs(q);
+                    const gamesData = querySnapshot.docs.map(doc => ({
+                        id: doc.id,
+                        ...doc.data()
+                    }));
+                    
+                    // Filter games where user is a team member
+                    const userGames = gamesData.filter(game => 
+                        game.teams?.some(team => team.playerIds.includes(user.uid))
+                    );
+                    
+                    setActiveGames(userGames);
+                    setLoading(false);
+                } catch (err) {
+                    console.error('Error loading games:', err);
+                    setLoading(false);
+                }
+            };
+            
+            const getUserTeam = (game) => {
+                return game.teams?.find(team => team.playerIds.includes(user.uid));
+            };
+            
+            const startRound = async (game) => {
+                // For MVP, generate sample questions
+                // In production, these would come from completed journeys
+                const sampleQuestions = [
+                    {
+                        id: 'q1',
+                        question: 'What are the TWO pieces of ID required for patient check-in?',
+                        options: [
+                            'Health card + Driver\'s license',
+                            'Health card + Birth certificate',
+                            'Passport + Health card',
+                            'Any two government IDs'
+                        ],
+                        correctAnswer: 0
+                    },
+                    {
+                        id: 'q2',
+                        question: 'What is the first step when a patient arrives?',
+                        options: [
+                            'Take vital signs',
+                            'Verify identity',
+                            'Collect payment',
+                            'Update medical history'
+                        ],
+                        correctAnswer: 1
+                    },
+                    {
+                        id: 'q3',
+                        question: 'Where do you find patient appointment history in Accuro?',
+                        options: [
+                            'Dashboard → History',
+                            'Patient Chart → Encounters',
+                            'Reports → Appointments',
+                            'Tools → Search'
+                        ],
+                        correctAnswer: 1
+                    },
+                    {
+                        id: 'q4',
+                        question: 'What should you do if a patient forgets their health card?',
+                        options: [
+                            'Refuse service',
+                            'Ask for alternate ID and make a note',
+                            'Bill them directly',
+                            'Call their doctor'
+                        ],
+                        correctAnswer: 1
+                    },
+                    {
+                        id: 'q5',
+                        question: 'How do you book a follow-up appointment in Accuro?',
+                        options: [
+                            'File → New Appointment',
+                            'Right-click patient → Book',
+                            'Calendar → Add Appointment',
+                            'Schedule → New'
+                        ],
+                        correctAnswer: 2
+                    }
+                ];
+                
+                setSelectedGame(game);
+                setQuestions(sampleQuestions.slice(0, game.questionsPerRound || 5));
+                setCurrentQuestion(0);
+                setUserAnswers([]);
+                setRoundComplete(false);
+                setCurrentView('playing');
+            };
+            
+            const submitAnswer = (answerIndex) => {
+                const isCorrect = questions[currentQuestion].correctAnswer === answerIndex;
+                const points = isCorrect ? 50 : 0;
+                
+                setUserAnswers([...userAnswers, {
+                    questionId: questions[currentQuestion].id,
+                    answer: answerIndex,
+                    correct: isCorrect,
+                    points: points
+                }]);
+                
+                if (currentQuestion < questions.length - 1) {
+                    setCurrentQuestion(currentQuestion + 1);
+                } else {
+                    setRoundComplete(true);
+                }
+            };
+            
+            if (loading) {
+                return (
+                    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
+                        <div className="text-center">
+                            <div className="text-6xl mb-4">⏳</div>
+                            <div className="text-xl font-semibold text-gray-600">Loading games...</div>
+                        </div>
+                    </div>
+                );
+            }
+            
+            // Playing a round
+            if (currentView === 'playing' && selectedGame && !roundComplete) {
+                const question = questions[currentQuestion];
+                
+                return (
+                    <div className="min-h-screen bg-gradient-to-br from-purple-50 via-pink-50 to-indigo-50">
+                        <div className="bg-white shadow-sm border-b border-gray-200">
+                            <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+                                <div className="flex justify-between items-center">
+                                    <div>
+                                        <h1 className="text-xl font-bold text-gray-800">{selectedGame.name}</h1>
+                                        <p className="text-sm text-gray-600">Question {currentQuestion + 1} of {questions.length}</p>
+                                    </div>
+                                    <div className="text-right">
+                                        <div className="text-sm text-gray-600">Your Team</div>
+                                        <div className="font-bold" style={{ color: getUserTeam(selectedGame).color }}>
+                                            {getUserTeam(selectedGame).name}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+                            <div className="bg-white rounded-xl shadow-2xl p-8">
+                                <div className="mb-6">
+                                    <div className="flex justify-between items-center mb-4">
+                                        <span className="text-sm font-semibold text-gray-600">Progress</span>
+                                        <span className="text-sm font-bold text-purple-600">
+                                            {Math.round((currentQuestion / questions.length) * 100)}%
+                                        </span>
+                                    </div>
+                                    <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+                                        <div 
+                                            className="h-full bg-gradient-to-r from-purple-500 to-pink-500 transition-all duration-300"
+                                            style={{ width: `${(currentQuestion / questions.length) * 100}%` }}
+                                        />
+                                    </div>
+                                </div>
+                                
+                                <h2 className="text-2xl font-bold text-gray-800 mb-8">
+                                    {question.question}
+                                </h2>
+                                
+                                <div className="space-y-3">
+                                    {question.options.map((option, index) => (
+                                        <button
+                                            key={index}
+                                            onClick={() => submitAnswer(index)}
+                                            className="w-full text-left p-4 border-2 border-gray-200 rounded-xl hover:border-purple-500 hover:bg-purple-50 transition group"
+                                        >
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-8 h-8 rounded-full bg-gray-200 group-hover:bg-purple-500 flex items-center justify-center font-bold text-gray-700 group-hover:text-white transition">
+                                                    {String.fromCharCode(65 + index)}
+                                                </div>
+                                                <span className="text-gray-800 font-medium">{option}</span>
+                                            </div>
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                );
+            }
+            
+            // Round complete
+            if (roundComplete && selectedGame) {
+                const totalPoints = userAnswers.reduce((sum, a) => sum + a.points, 0);
+                const correctCount = userAnswers.filter(a => a.correct).length;
+                const accuracy = Math.round((correctCount / userAnswers.length) * 100);
+                
+                return (
+                    <div className="min-h-screen bg-gradient-to-br from-purple-50 via-pink-50 to-indigo-50 flex items-center justify-center p-4">
+                        <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-2xl w-full">
+                            <div className="text-center mb-8">
+                                <div className="text-6xl mb-4">🎉</div>
+                                <h2 className="text-3xl font-bold text-gray-800 mb-2">Round Complete!</h2>
+                                <p className="text-gray-600">Great job on this round</p>
+                            </div>
+                            
+                            <div className="grid grid-cols-3 gap-4 mb-8">
+                                <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-xl p-4 text-center">
+                                    <div className="text-3xl font-bold text-purple-600">{totalPoints}</div>
+                                    <div className="text-sm text-gray-600">Points Earned</div>
+                                </div>
+                                <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-xl p-4 text-center">
+                                    <div className="text-3xl font-bold text-green-600">{correctCount}/{userAnswers.length}</div>
+                                    <div className="text-sm text-gray-600">Correct</div>
+                                </div>
+                                <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-4 text-center">
+                                    <div className="text-3xl font-bold text-blue-600">{accuracy}%</div>
+                                    <div className="text-sm text-gray-600">Accuracy</div>
+                                </div>
+                            </div>
+                            
+                            <div className="mb-8">
+                                <h3 className="font-bold text-gray-800 mb-3">Your Answers:</h3>
+                                <div className="space-y-2">
+                                    {userAnswers.map((answer, i) => (
+                                        <div key={i} className="flex items-center gap-2 text-sm">
+                                            <span className={`w-6 h-6 rounded-full flex items-center justify-center text-white ${
+                                                answer.correct ? 'bg-green-500' : 'bg-red-500'
+                                            }`}>
+                                                {answer.correct ? '✓' : '✗'}
+                                            </span>
+                                            <span className="text-gray-700">
+                                                Question {i + 1}: {answer.points} pts
+                                            </span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                            
+                            <div className="flex gap-3">
+                                <button
+                                    onClick={() => {
+                                        setCurrentView('lobby');
+                                        setSelectedGame(null);
+                                    }}
+                                    className="flex-1 px-6 py-3 bg-gradient-to-r from-purple-500 to-pink-600 text-white font-semibold rounded-lg hover:from-purple-600 hover:to-pink-700 transition"
+                                >
+                                    Back to Games
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                );
+            }
+            
+            // Game lobby
+            return (
+                <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
+                    <div className="bg-white shadow-sm border-b border-gray-200">
+                        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+                            <div className="flex justify-between items-center">
+                                <div>
+                                    <h1 className="text-2xl font-bold text-gray-800">Quiz Games</h1>
+                                    <p className="text-sm text-gray-600">Compete with your team!</p>
+                                </div>
+                                <button
+                                    onClick={onBack}
+                                    className="flex items-center gap-2 px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition"
+                                >
+                                    <ChevronLeft className="w-4 h-4" />
+                                    Back to Dashboard
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+                        {activeGames.length === 0 ? (
+                            <div className="bg-white rounded-xl shadow-lg p-12 text-center">
+                                <div className="text-6xl mb-4">🎮</div>
+                                <h2 className="text-2xl font-bold text-gray-800 mb-2">No Active Games</h2>
+                                <p className="text-gray-600">Your trainer will create quiz games soon!</p>
+                            </div>
+                        ) : (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                {activeGames.map(game => {
+                                    const userTeam = getUserTeam(game);
+                                    const sortedTeams = [...(game.teams || [])].sort((a, b) => b.totalPoints - a.totalPoints);
+                                    
+                                    return (
+                                        <div key={game.id} className="bg-white rounded-xl shadow-lg overflow-hidden">
+                                            <div className="bg-gradient-to-r from-purple-500 to-pink-600 p-6">
+                                                <h3 className="text-2xl font-bold text-white mb-2">{game.name}</h3>
+                                                <div className="flex items-center gap-2">
+                                                    <div className="w-3 h-3 rounded-full" style={{ backgroundColor: userTeam.color }}></div>
+                                                    <span className="text-white font-semibold">{userTeam.name}</span>
+                                                </div>
+                                            </div>
+                                            
+                                            <div className="p-6">
+                                                <div className="mb-6">
+                                                    <h4 className="font-bold text-gray-800 mb-3">Leaderboard</h4>
+                                                    <div className="space-y-2">
+                                                        {sortedTeams.map((team, index) => (
+                                                            <div 
+                                                                key={team.id}
+                                                                className={`flex items-center justify-between p-3 rounded-lg ${
+                                                                    team.id === userTeam.id ? 'bg-purple-50 border-2 border-purple-200' : 'bg-gray-50'
+                                                                }`}
+                                                            >
+                                                                <div className="flex items-center gap-3">
+                                                                    <span className="text-2xl">
+                                                                        {index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : ''}
+                                                                    </span>
+                                                                    <div className="w-3 h-3 rounded-full" style={{ backgroundColor: team.color }}></div>
+                                                                    <span className="font-semibold text-gray-800">{team.name}</span>
+                                                                </div>
+                                                                <span className="font-bold text-gray-700">{team.totalPoints} pts</span>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                                
+                                                <button
+                                                    onClick={() => startRound(game)}
+                                                    className="w-full px-6 py-4 bg-gradient-to-r from-purple-500 to-pink-600 hover:from-purple-600 hover:to-pink-700 text-white font-bold rounded-lg transition text-lg"
+                                                >
+                                                    🎮 Play Round
+                                                </button>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+                    </div>
+                </div>
+            );
+        }
+        
         // ============================================
         // JOURNEY VIEW
         // ============================================

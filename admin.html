@@ -869,6 +869,7 @@
             
             // Screen Recording Functions
             const formatDuration = (seconds) => {
+                if (!seconds || isNaN(seconds)) return '0:00';
                 const mins = Math.floor(seconds / 60);
                 const secs = Math.floor(seconds % 60);
                 return `${mins}:${secs.toString().padStart(2, '0')}`;
@@ -1273,7 +1274,7 @@
                                         </div>
                                         <div className="text-center">
                                             <div className="text-3xl font-bold text-blue-600">
-                                                {Math.round(recordedChunks.reduce((s, c) => s + c.size, 0) / 1024 / 1024)}MB
+                                                {recordedChunks.length > 0 ? Math.round(recordedChunks.reduce((s, c) => s + c.size, 0) / 1024 / 1024) : 0}MB
                                             </div>
                                             <div className="text-sm text-gray-600">File Size</div>
                                         </div>

@@ -3962,29 +3962,50 @@
             
             const loadAll = async () => {
                 setLoading(true);
-                await Promise.all([loadTemplates(), loadSchedules(), loadJourneys()]);
-                setLoading(false);
+                try {
+                    await Promise.all([loadTemplates(), loadSchedules(), loadJourneys()]);
+                } catch (err) {
+                    console.error('Error loading calendar templates data:', err);
+                    showToast('Error loading data: ' + err.message, 'error');
+                } finally {
+                    setLoading(false);
+                }
             };
             
             const loadTemplates = async () => {
-                const { collection, getDocs } = window.firebaseModules;
-                const snapshot = await getDocs(collection(db, 'healthcare_templates'));
-                const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                setTemplates(data);
+                try {
+                    const { collection, getDocs } = window.firebaseModules;
+                    const snapshot = await getDocs(collection(db, 'healthcare_templates'));
+                    const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    setTemplates(data);
+                } catch (err) {
+                    console.error('Error loading templates:', err);
+                    setTemplates([]);
+                }
             };
             
             const loadSchedules = async () => {
-                const { collection, getDocs } = window.firebaseModules;
-                const snapshot = await getDocs(collection(db, 'healthcare_schedules'));
-                const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                setSchedules(data);
+                try {
+                    const { collection, getDocs } = window.firebaseModules;
+                    const snapshot = await getDocs(collection(db, 'healthcare_schedules'));
+                    const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    setSchedules(data);
+                } catch (err) {
+                    console.error('Error loading schedules:', err);
+                    setSchedules([]);
+                }
             };
             
             const loadJourneys = async () => {
-                const { collection, getDocs, query, where } = window.firebaseModules;
-                const snapshot = await getDocs(query(collection(db, 'journeys'), where('status', '==', 'published')));
-                const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                setJourneys(data);
+                try {
+                    const { collection, getDocs, query, where } = window.firebaseModules;
+                    const snapshot = await getDocs(query(collection(db, 'journeys'), where('status', '==', 'published')));
+                    const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    setJourneys(data);
+                } catch (err) {
+                    console.error('Error loading journeys:', err);
+                    setJourneys([]);
+                }
             };
             
             const createNewTemplate = () => {

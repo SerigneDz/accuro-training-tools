@@ -3998,10 +3998,15 @@
             
             const loadJourneys = async () => {
                 try {
-                    const { collection, getDocs, query, where } = window.firebaseModules;
-                    const snapshot = await getDocs(query(collection(db, 'journeys'), where('status', '==', 'published')));
-                    const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                    setJourneys(data);
+                    const { collection, getDocs } = window.firebaseModules;
+                    const snapshot = await getDocs(collection(db, 'journeys'));
+                    const allJourneys = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    // Filter for published journeys (case-insensitive)
+                    const published = allJourneys.filter(j => 
+                        j.status && j.status.toLowerCase() === 'published'
+                    );
+                    console.log(`Journeys: ${allJourneys.length} total, ${published.length} published`);
+                    setJourneys(published);
                 } catch (err) {
                     console.error('Error loading journeys:', err);
                     setJourneys([]);

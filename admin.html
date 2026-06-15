@@ -275,9 +275,16 @@
         // education tracker spreadsheet: Course or Workshop Title; Completed; Month/Year Completed; 
         // Est. Time to Complete; Host; Website Link
         function parseCSV(text) {
-            // Detect delimiter (the source file uses semicolons)
-            const firstLine = text.split('\n')[0];
-            const delimiter = firstLine.includes(';') ? ';' : ',';
+            // Strip BOM if present
+            if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
+            
+            // Detect delimiter from the first non-empty line (support ; , and tab)
+            const lines = text.split('\n');
+            const firstNonEmpty = lines.find(l => l.trim() !== '') || '';
+            let delimiter = ',';
+            if (firstNonEmpty.includes('\t')) delimiter = '\t';
+            else if (firstNonEmpty.includes(';')) delimiter = ';';
+            else if (firstNonEmpty.includes(',')) delimiter = ',';
             
             const rows = [];
             let row = [];
@@ -4460,15 +4467,18 @@
                     try {
                         const text = evt.target.result;
                         const rows = parseCSV(text);
+                        console.log('Parsed CSV rows:', rows.slice(0, 3));
                         if (rows.length < 2) {
                             setError('CSV file appears to be empty or has no data rows');
                             return;
                         }
                         const headers = rows[0];
                         const map = mapEducationCSVHeaders(headers);
+                        console.log('Detected headers:', headers);
+                        console.log('Header map:', map);
                         
                         if (map.title === undefined) {
-                            setError('Could not find a "Course or Workshop Title" column. Please check your CSV headers.');
+                            setError(`Could not find a "Course or Workshop Title" column. Detected headers: ${headers.map(h => `"${h}"`).join(', ')}`);
                             return;
                         }
                         

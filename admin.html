@@ -31,6 +31,9 @@
     <!-- SortableJS for drag-drop -->
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
     
+    <!-- SheetJS for Excel (.xlsx) import -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    
     <style>
         body { margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
         #root { min-height: 100vh; }
@@ -4449,48 +4452,107 @@
         // CSV IMPORT MODAL (Education Tracker)
         // ============================================
         function CSVImportModal({ onClose, onImported, showToast }) {
-            const [fileContent, setFileContent] = useState(null);
             const [fileName, setFileName] = useState('');
-            const [parsedRows, setParsedRows] = useState([]);
-            const [headerMap, setHeaderMap] = useState({});
+            const [parsedRows, setParsedRows] = useState([]); // [{ title, host, websiteLink, estTimeToComplete, category }]
             const [importing, setImporting] = useState(false);
             const [error, setError] = useState('');
+            
+            // Convert any cell value to a trimmed string (handles booleans/numbers from xlsx)
+            const cellToString = (val) => {
+                if (val === null || val === undefined) return '';
+                return String(val).trim();
+            };
+            
+            const processRows = (rows) => {
+                if (rows.length < 2) {
+                    setError('File appears to be empty or has no data rows');
+                    return;
+                }
+                const headers = rows[0].map(h => cellToString(h));
+                const map = mapEducationCSVHeaders(headers);
+                console.log('Detected headers:', headers);
+                console.log('Header map:', map);
+                
+                if (map.title === undefined) {
+                    setError(`Could not find a "Course or Workshop Title" column. Detected headers: ${headers.map(h => `"${h}"`).join(', ')}`);
+                    return;
+                }
+                
+                let currentCategory = '';
+                const courses = [];
+                
+                rows.slice(1).forEach(row => {
+                    const title = cellToString(row[map.title]);
+                    if (!title) return;
+                    
+                    // Detect "category divider" rows: title present but every other mapped
+                    // column is empty (e.g. "Orientation - First 3 days")
+                    const otherFields = ['host', 'websiteLink', 'estTime', 'completedDate', 'completedCheckbox']
+                        .map(key => map[key] !== undefined ? cellToString(row[map[key]]) : '')
+                        .filter(v => v !== '');
+                    
+                    if (otherFields.length === 0) {
+                        currentCategory = title;
+                        return; // don't add as a course
+                    }
+                    
+                    courses.push({
+                        title,
+                        host: map.host !== undefined ? cellToString(row[map.host]) : '',
+                        websiteLink: map.websiteLink !== undefined ? cellToString(row[map.websiteLink]) : '',
+                        estTimeToComplete: map.estTime !== undefined ? cellToString(row[map.estTime]) : '',
+                        category: currentCategory
+                    });
+                });
+                
+                if (courses.length === 0) {
+                    setError('No course rows found (only category headers detected). Please check your file.');
+                    return;
+                }
+                
+                setParsedRows(courses);
+            };
             
             const handleFileChange = (e) => {
                 const file = e.target.files[0];
                 if (!file) return;
                 setFileName(file.name);
                 setError('');
+                setParsedRows([]);
                 
-                const reader = new FileReader();
-                reader.onload = (evt) => {
-                    try {
-                        const text = evt.target.result;
-                        const rows = parseCSV(text);
-                        console.log('Parsed CSV rows:', rows.slice(0, 3));
-                        if (rows.length < 2) {
-                            setError('CSV file appears to be empty or has no data rows');
-                            return;
+                const isExcel = /\.(xlsx|xls)$/i.test(file.name);
+                
+                if (isExcel) {
+                    const reader = new FileReader();
+                    reader.onload = (evt) => {
+                        try {
+                            const data = new Uint8Array(evt.target.result);
+                            const workbook = XLSX.read(data, { type: 'array' });
+                            const firstSheetName = workbook.SheetNames[0];
+                            const worksheet = workbook.Sheets[firstSheetName];
+                            const rows = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' });
+                            console.log('Parsed XLSX rows:', rows.slice(0, 5));
+                            processRows(rows);
+                        } catch (err) {
+                            console.error(err);
+                            setError('Failed to parse Excel file: ' + err.message);
                         }
-                        const headers = rows[0];
-                        const map = mapEducationCSVHeaders(headers);
-                        console.log('Detected headers:', headers);
-                        console.log('Header map:', map);
-                        
-                        if (map.title === undefined) {
-                            setError(`Could not find a "Course or Workshop Title" column. Detected headers: ${headers.map(h => `"${h}"`).join(', ')}`);
-                            return;
+                    };
+                    reader.readAsArrayBuffer(file);
+                } else {
+                    const reader = new FileReader();
+                    reader.onload = (evt) => {
+                        try {
+                            const text = evt.target.result;
+                            const rows = parseCSV(text);
+                            console.log('Parsed CSV rows:', rows.slice(0, 5));
+                            processRows(rows);
+                        } catch (err) {
+                            setError('Failed to parse CSV: ' + err.message);
                         }
-                        
-                        const dataRows = rows.slice(1).filter(r => r[map.title] && r[map.title].trim());
-                        setHeaderMap(map);
-                        setParsedRows(dataRows);
-                        setFileContent(text);
-                    } catch (err) {
-                        setError('Failed to parse CSV: ' + err.message);
-                    }
-                };
-                reader.readAsText(file);
+                    };
+                    reader.readAsText(file);
+                }
             };
             
             const handleImport = async () => {
@@ -4500,18 +4562,15 @@
                     const { doc, setDoc, serverTimestamp } = window.firebaseModules;
                     
                     let imported = 0;
-                    for (const row of parsedRows) {
-                        const title = row[headerMap.title]?.trim();
-                        if (!title) continue;
-                        
-                        const id = `course_${title.toLowerCase().replace(/[^a-z0-9]+/g, '_').slice(0, 50)}_${Date.now()}_${imported}`;
+                    for (const course of parsedRows) {
+                        const id = `course_${course.title.toLowerCase().replace(/[^a-z0-9]+/g, '_').slice(0, 50)}_${Date.now()}_${imported}`;
                         
                         await setDoc(doc(db, 'education_courses', id), {
-                            title: title,
-                            host: headerMap.host !== undefined ? (row[headerMap.host] || '').trim() : '',
-                            websiteLink: headerMap.websiteLink !== undefined ? (row[headerMap.websiteLink] || '').trim() : '',
-                            estTimeToComplete: headerMap.estTime !== undefined ? (row[headerMap.estTime] || '').trim() : '',
-                            category: '',
+                            title: course.title,
+                            host: course.host,
+                            websiteLink: course.websiteLink,
+                            estTimeToComplete: course.estTimeToComplete,
+                            category: course.category,
                             recurringAnnual: false,
                             isActive: true,
                             createdAt: serverTimestamp(),
@@ -4523,8 +4582,8 @@
                     showToast(`✅ Imported ${imported} course${imported !== 1 ? 's' : ''} into the catalog!`);
                     onImported();
                 } catch (err) {
-                    console.error('Error importing CSV:', err);
-                    showToast('Failed to import CSV: ' + err.message, 'error');
+                    console.error('Error importing file:', err);
+                    showToast('Failed to import: ' + err.message, 'error');
                 } finally {
                     setImporting(false);
                 }
@@ -4534,22 +4593,22 @@
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
                     <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
                         <div className="sticky top-0 bg-white border-b border-gray-100 px-6 py-4 flex justify-between items-center z-10">
-                            <h2 className="text-xl font-bold text-gray-800">📤 Import Education Tracker CSV</h2>
+                            <h2 className="text-xl font-bold text-gray-800">📤 Import Education Tracker</h2>
                             <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-2xl">✕</button>
                         </div>
                         
                         <div className="p-6 space-y-4">
                             <div className="bg-indigo-50 rounded-lg p-4 text-sm text-indigo-700">
-                                <p className="font-semibold mb-1">Expected columns (flexible matching):</p>
-                                <p>Course or Workshop Title, Completed, Month/Year Completed, Est. Time to Complete, Host, Website Link</p>
-                                <p className="mt-2 text-indigo-600">This imports courses into the shared catalog. Individual completion status is tracked separately per staff member.</p>
+                                <p className="font-semibold mb-1">Supports .xlsx and .csv files. Expected columns (flexible matching):</p>
+                                <p>Course/Workshop Title, Completed, Month/Year Completed, Est. Time to Complete, Host, Website Link</p>
+                                <p className="mt-2 text-indigo-600">Rows that look like section headers (e.g. "Orientation - First 3 days") are detected automatically and used as a category label rather than imported as courses.</p>
                             </div>
                             
                             <div>
-                                <label className="block text-sm font-semibold text-gray-700 mb-2">Select CSV file</label>
+                                <label className="block text-sm font-semibold text-gray-700 mb-2">Select file (.xlsx or .csv)</label>
                                 <input
                                     type="file"
-                                    accept=".csv"
+                                    accept=".csv,.xlsx,.xls"
                                     onChange={handleFileChange}
                                     className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none"
                                 />
@@ -4571,16 +4630,18 @@
                                             <thead className="bg-gray-50 sticky top-0">
                                                 <tr>
                                                     <th className="text-left px-3 py-2 font-semibold text-gray-600">Title</th>
+                                                    <th className="text-left px-3 py-2 font-semibold text-gray-600">Category</th>
                                                     <th className="text-left px-3 py-2 font-semibold text-gray-600">Host</th>
                                                     <th className="text-left px-3 py-2 font-semibold text-gray-600">Est. Time</th>
                                                 </tr>
                                             </thead>
                                             <tbody>
-                                                {parsedRows.slice(0, 50).map((row, i) => (
+                                                {parsedRows.slice(0, 50).map((course, i) => (
                                                     <tr key={i} className="border-t border-gray-100">
-                                                        <td className="px-3 py-2 text-gray-800">{row[headerMap.title]}</td>
-                                                        <td className="px-3 py-2 text-gray-500">{headerMap.host !== undefined ? row[headerMap.host] : '—'}</td>
-                                                        <td className="px-3 py-2 text-gray-500">{headerMap.estTime !== undefined ? row[headerMap.estTime] : '—'}</td>
+                                                        <td className="px-3 py-2 text-gray-800">{course.title}</td>
+                                                        <td className="px-3 py-2 text-gray-500">{course.category || '—'}</td>
+                                                        <td className="px-3 py-2 text-gray-500">{course.host || '—'}</td>
+                                                        <td className="px-3 py-2 text-gray-500">{course.estTimeToComplete || '—'}</td>
                                                     </tr>
                                                 ))}
                                             </tbody>

@@ -3502,9 +3502,18 @@
         // ASSIGN SCHEDULE MODAL
         // ============================================
         function AssignScheduleModal({ template, showToast, onClose, onAssigned }) {
+            const [users, setUsers] = useState([]);
+            const [loadingUsers, setLoadingUsers] = useState(true);
+            const [assignMode, setAssignMode] = useState('existing'); // existing | new
+            const [searchQuery, setSearchQuery] = useState('');
+            const [selectedUser, setSelectedUser] = useState(null);
+            
+            // New hire fields (when user not in system)
             const [employeeName, setEmployeeName] = useState('');
             const [employeeEmail, setEmployeeEmail] = useState('');
             const [department, setDepartment] = useState('');
+            const [sendInvite, setSendInvite] = useState(true);
+            
             const [startDate, setStartDate] = useState(() => {
                 const tomorrow = new Date();
                 tomorrow.setDate(tomorrow.getDate() + 1);
@@ -3513,12 +3522,59 @@
             const [notes, setNotes] = useState('');
             const [saving, setSaving] = useState(false);
             
+            // Load existing users
+            useEffect(() => {
+                loadUsers();
+            }, []);
+            
+            const loadUsers = async () => {
+                try {
+                    const { collection, getDocs } = window.firebaseModules;
+                    const snapshot = await getDocs(collection(db, 'users'));
+                    const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    setUsers(data);
+                } catch (err) {
+                    console.error('Error loading users:', err);
+                } finally {
+                    setLoadingUsers(false);
+                }
+            };
+            
+            // Filter users by search
+            const filteredUsers = users.filter(u => {
+                if (!searchQuery.trim()) return true;
+                const q = searchQuery.toLowerCase();
+                return (u.displayName || '').toLowerCase().includes(q) 
+                    || (u.email || '').toLowerCase().includes(q);
+            });
+            
+            const selectUser = (user) => {
+                setSelectedUser(user);
+                setEmployeeName(user.displayName || '');
+                setEmployeeEmail(user.email || '');
+                setSearchQuery('');
+            };
+            
+            const clearSelection = () => {
+                setSelectedUser(null);
+                setEmployeeName('');
+                setEmployeeEmail('');
+            };
+            
             // Calculate preview dates
             const previewDates = calculateScheduleDates(startDate, template.items.length, template.includeWeekends);
             const endDate = previewDates[previewDates.length - 1]?.date;
             
+            // Get display name/email based on mode
+            const finalName = assignMode === 'existing' ? (selectedUser?.displayName || '') : employeeName;
+            const finalEmail = assignMode === 'existing' ? (selectedUser?.email || '') : employeeEmail;
+            
             const handleAssign = async () => {
-                if (!employeeName.trim()) {
+                if (assignMode === 'existing' && !selectedUser) {
+                    alert('Please select an existing user');
+                    return;
+                }
+                if (assignMode === 'new' && !employeeName.trim()) {
                     alert('Please enter the employee name');
                     return;
                 }
@@ -3541,8 +3597,9 @@
                     }));
                     
                     const scheduleData = {
-                        employeeName: employeeName.trim(),
-                        employeeEmail: employeeEmail.trim(),
+                        employeeName: finalName.trim(),
+                        employeeEmail: finalEmail.trim(),
+                        employeeId: selectedUser?.id || null,
                         department: department.trim(),
                         position: template.position,
                         templateId: template.id,
@@ -3554,6 +3611,8 @@
                         status: 'active',
                         overallProgress: 0,
                         notes: notes.trim(),
+                        isNewHire: assignMode === 'new',
+                        inviteSent: assignMode === 'new' && sendInvite,
                         assignedBy: auth.currentUser?.uid || null,
                         assignedByName: auth.currentUser?.displayName || auth.currentUser?.email || 'Admin',
                         createdAt: serverTimestamp(),
@@ -3561,11 +3620,18 @@
                     };
                     
                     await setDoc(doc(db, 'healthcare_schedules', scheduleId), scheduleData);
-                    showToast(`✅ Onboarding schedule assigned to ${employeeName}!`);
+                    
+                    if (assignMode === 'new' && sendInvite && employeeEmail.trim()) {
+                        // TODO: Send invite email (future: Teams integration)
+                        showToast(`✅ Schedule assigned to ${finalName}! Email invite pending (Teams integration coming soon)`);
+                    } else {
+                        showToast(`✅ Onboarding schedule assigned to ${finalName}!`);
+                    }
+                    
                     onAssigned();
                 } catch (err) {
                     console.error('Error assigning schedule:', err);
-                    showToast('Failed to assign schedule', 'error');
+                    showToast('Failed to assign schedule: ' + err.message, 'error');
                 } finally {
                     setSaving(false);
                 }
@@ -3580,33 +3646,162 @@
                         </div>
                         
                         <div className="p-6 space-y-5">
+                            {/* Template Info */}
                             <div className="bg-indigo-50 rounded-lg p-4">
                                 <p className="text-sm text-indigo-700">
                                     <span className="font-semibold">Template:</span> {template.name} ({template.position}, {template.items.length} days, {template.includeWeekends ? 'all days' : 'Mon-Fri'})
                                 </p>
                             </div>
                             
+                            {/* Assign Mode Toggle */}
+                            <div>
+                                <label className="block text-sm font-semibold text-gray-700 mb-2">Assign To</label>
+                                <div className="flex gap-2">
+                                    <button
+                                        onClick={() => { setAssignMode('existing'); clearSelection(); }}
+                                        className={`flex-1 px-4 py-3 rounded-lg text-sm font-medium transition border-2 ${
+                                            assignMode === 'existing' 
+                                                ? 'border-indigo-600 bg-indigo-50 text-indigo-700' 
+                                                : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'
+                                        }`}
+                                    >
+                                        <div className="text-lg mb-1">👤</div>
+                                        Existing User
+                                        <div className="text-xs opacity-70 mt-0.5">Already in the system</div>
+                                    </button>
+                                    <button
+                                        onClick={() => { setAssignMode('new'); clearSelection(); }}
+                                        className={`flex-1 px-4 py-3 rounded-lg text-sm font-medium transition border-2 ${
+                                            assignMode === 'new' 
+                                                ? 'border-indigo-600 bg-indigo-50 text-indigo-700' 
+                                                : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'
+                                        }`}
+                                    >
+                                        <div className="text-lg mb-1">✉️</div>
+                                        New Hire
+                                        <div className="text-xs opacity-70 mt-0.5">Not yet in the system</div>
+                                    </button>
+                                </div>
+                            </div>
+                            
+                            {/* Existing User Search */}
+                            {assignMode === 'existing' && (
+                                <div>
+                                    {selectedUser ? (
+                                        <div className="flex items-center justify-between bg-green-50 border border-green-200 rounded-lg p-4">
+                                            <div>
+                                                <div className="font-semibold text-green-800">{selectedUser.displayName}</div>
+                                                <div className="text-sm text-green-600">{selectedUser.email}</div>
+                                                <div className="text-xs text-green-500 mt-1">
+                                                    {selectedUser.role === 'trainer' ? '👨‍🏫 Trainer' : '👨‍🎓 Student'}
+                                                </div>
+                                            </div>
+                                            <button
+                                                onClick={clearSelection}
+                                                className="px-3 py-1.5 bg-white text-gray-600 rounded-lg border border-gray-200 hover:bg-gray-50 text-sm"
+                                            >
+                                                Change
+                                            </button>
+                                        </div>
+                                    ) : (
+                                        <div>
+                                            <label className="block text-sm font-semibold text-gray-700 mb-1">Search Users</label>
+                                            <input
+                                                type="text"
+                                                value={searchQuery}
+                                                onChange={e => setSearchQuery(e.target.value)}
+                                                placeholder="Type a name or email..."
+                                                className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                                            />
+                                            
+                                            {loadingUsers ? (
+                                                <p className="text-sm text-gray-400 mt-2">Loading users...</p>
+                                            ) : (
+                                                <div className="mt-2 border border-gray-200 rounded-lg max-h-48 overflow-y-auto">
+                                                    {filteredUsers.length === 0 ? (
+                                                        <div className="p-4 text-center text-sm text-gray-400">
+                                                            {searchQuery ? 'No users match your search' : 'No users found'}
+                                                            <button
+                                                                onClick={() => setAssignMode('new')}
+                                                                className="block mx-auto mt-2 text-indigo-600 hover:text-indigo-800 font-medium"
+                                                            >
+                                                                → Add as New Hire instead
+                                                            </button>
+                                                        </div>
+                                                    ) : (
+                                                        filteredUsers.map(user => (
+                                                            <button
+                                                                key={user.id}
+                                                                onClick={() => selectUser(user)}
+                                                                className="w-full flex items-center justify-between px-4 py-3 hover:bg-indigo-50 border-b border-gray-50 last:border-b-0 transition text-left"
+                                                            >
+                                                                <div>
+                                                                    <div className="font-medium text-gray-800">{user.displayName || 'Unnamed'}</div>
+                                                                    <div className="text-xs text-gray-400">{user.email}</div>
+                                                                </div>
+                                                                <span className={`text-xs px-2 py-0.5 rounded-full ${
+                                                                    user.role === 'trainer' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
+                                                                }`}>
+                                                                    {user.role === 'trainer' ? 'Trainer' : 'Student'}
+                                                                </span>
+                                                            </button>
+                                                        ))
+                                                    )}
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                            
+                            {/* New Hire Form */}
+                            {assignMode === 'new' && (
+                                <div className="space-y-4">
+                                    <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-amber-800">
+                                        💡 This person doesn't have an account yet. Fill in their details and optionally send them an invite to join the platform.
+                                    </div>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="block text-sm font-semibold text-gray-700 mb-1">Full Name *</label>
+                                            <input
+                                                type="text"
+                                                value={employeeName}
+                                                onChange={e => setEmployeeName(e.target.value)}
+                                                placeholder="Sarah Johnson"
+                                                className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-semibold text-gray-700 mb-1">Email</label>
+                                            <input
+                                                type="email"
+                                                value={employeeEmail}
+                                                onChange={e => setEmployeeEmail(e.target.value)}
+                                                placeholder="sarah@clinic.com"
+                                                className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                                            />
+                                        </div>
+                                    </div>
+                                    
+                                    {employeeEmail.trim() && (
+                                        <label className="flex items-center gap-2 cursor-pointer">
+                                            <input
+                                                type="checkbox"
+                                                checked={sendInvite}
+                                                onChange={e => setSendInvite(e.target.checked)}
+                                                className="w-4 h-4"
+                                            />
+                                            <span className="text-sm text-gray-700">
+                                                Send email invite to join the training platform
+                                            </span>
+                                            <span className="text-xs text-gray-400">(Teams integration coming soon)</span>
+                                        </label>
+                                    )}
+                                </div>
+                            )}
+                            
+                            {/* Department & Start Date (shared) */}
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-sm font-semibold text-gray-700 mb-1">Employee Name *</label>
-                                    <input
-                                        type="text"
-                                        value={employeeName}
-                                        onChange={e => setEmployeeName(e.target.value)}
-                                        placeholder="Sarah Johnson"
-                                        className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-semibold text-gray-700 mb-1">Email</label>
-                                    <input
-                                        type="email"
-                                        value={employeeEmail}
-                                        onChange={e => setEmployeeEmail(e.target.value)}
-                                        placeholder="sarah@clinic.com"
-                                        className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none"
-                                    />
-                                </div>
                                 <div>
                                     <label className="block text-sm font-semibold text-gray-700 mb-1">Department</label>
                                     <input
@@ -3640,11 +3835,18 @@
                                                 </span>
                                                 <span className="text-sm text-gray-500 ml-2">— {item.title || `Day ${item.dayNumber}`}</span>
                                             </div>
-                                            {item.journeyIds && item.journeyIds.length > 0 && (
-                                                <span className="text-xs bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full">
-                                                    {item.journeyIds.length} journey{item.journeyIds.length !== 1 ? 's' : ''}
-                                                </span>
-                                            )}
+                                            <div className="flex gap-1">
+                                                {item.journeyIds && item.journeyIds.length > 0 && (
+                                                    <span className="text-xs bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full">
+                                                        {item.journeyIds.length} journey{item.journeyIds.length !== 1 ? 's' : ''}
+                                                    </span>
+                                                )}
+                                                {item.tasks && item.tasks.length > 0 && (
+                                                    <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">
+                                                        {item.tasks.length} task{item.tasks.length !== 1 ? 's' : ''}
+                                                    </span>
+                                                )}
+                                            </div>
                                         </div>
                                     ))}
                                 </div>
@@ -3653,6 +3855,7 @@
                                 </p>
                             </div>
                             
+                            {/* Notes */}
                             <div>
                                 <label className="block text-sm font-semibold text-gray-700 mb-1">Notes (optional)</label>
                                 <textarea
@@ -3665,20 +3868,30 @@
                             </div>
                         </div>
                         
-                        <div className="sticky bottom-0 bg-white border-t border-gray-100 px-6 py-4 flex justify-end gap-3">
-                            <button
-                                onClick={onClose}
-                                className="px-6 py-2 border border-gray-200 text-gray-600 rounded-lg hover:bg-gray-50 transition"
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                onClick={handleAssign}
-                                disabled={saving}
-                                className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition font-semibold disabled:opacity-50"
-                            >
-                                {saving ? 'Assigning...' : 'Assign Schedule'}
-                            </button>
+                        <div className="sticky bottom-0 bg-white border-t border-gray-100 px-6 py-4 flex justify-between items-center">
+                            <div className="text-sm text-gray-400">
+                                {assignMode === 'existing' && selectedUser && (
+                                    <span>Assigning to: <span className="font-medium text-gray-600">{selectedUser.displayName}</span></span>
+                                )}
+                                {assignMode === 'new' && employeeName && (
+                                    <span>New hire: <span className="font-medium text-gray-600">{employeeName}</span></span>
+                                )}
+                            </div>
+                            <div className="flex gap-3">
+                                <button
+                                    onClick={onClose}
+                                    className="px-6 py-2 border border-gray-200 text-gray-600 rounded-lg hover:bg-gray-50 transition"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={handleAssign}
+                                    disabled={saving || (assignMode === 'existing' && !selectedUser) || (assignMode === 'new' && !employeeName.trim())}
+                                    className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    {saving ? 'Assigning...' : assignMode === 'new' && sendInvite ? 'Assign & Send Invite' : 'Assign Schedule'}
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>

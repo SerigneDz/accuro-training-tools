@@ -9,12 +9,12 @@
     <script type="module">
         import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
         import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut, sendPasswordResetEmail } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
-        import { getFirestore, collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, query, where, orderBy, onSnapshot, serverTimestamp, arrayUnion, arrayRemove } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+        import { getFirestore, collection, doc, getDoc, getDocs, addDoc, setDoc, updateDoc, deleteDoc, query, where, orderBy, onSnapshot, serverTimestamp, arrayUnion, arrayRemove } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
         import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js';
         
         window.firebaseModules = {
             initializeApp, getAuth, onAuthStateChanged, signOut, getFirestore,
-            collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc,
+            collection, doc, getDoc, getDocs, addDoc, setDoc, updateDoc, deleteDoc,
             query, where, orderBy, onSnapshot, serverTimestamp, arrayUnion, arrayRemove, signInWithEmailAndPassword, sendPasswordResetEmail,
             getStorage, ref, uploadBytes, getDownloadURL, deleteObject
         };
@@ -174,6 +174,21 @@
                 <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                 </svg>
+            ),
+            BookOpen: ({ className }) => (
+                <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s4.832.477 6 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                </svg>
+            ),
+            Upload: ({ className }) => (
+                <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                </svg>
+            ),
+            RefreshCw: ({ className }) => (
+                <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
             )
         };
         
@@ -227,13 +242,115 @@
             return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
         }
 
+        // Convert "HH:MM" (24hr) to "H:MM AM/PM" for display/CSV
+        function formatTime12hr(timeStr) {
+            if (!timeStr) return '';
+            const [hourStr, minStr] = timeStr.split(':');
+            let hour = parseInt(hourStr, 10);
+            const period = hour >= 12 ? 'PM' : 'AM';
+            hour = hour % 12 || 12;
+            return `${hour}:${minStr} ${period}`;
+        }
+
+        // Sort tasks by their optional time field (tasks without a time keep relative order, appended last)
+        function sortTasksByTime(tasks) {
+            if (!tasks) return [];
+            const withTime = tasks.filter(t => t.time);
+            const withoutTime = tasks.filter(t => !t.time);
+            withTime.sort((a, b) => a.time.localeCompare(b.time));
+            return [...withTime, ...withoutTime];
+        }
+
+        // ============================================
+        // CONTINUING EDUCATION - CONSTANTS & HELPERS
+        // ============================================
+        const EDUCATION_STATUS = {
+            not_started: { label: 'Not Started', color: 'bg-gray-100 text-gray-600', icon: '○' },
+            in_progress: { label: 'In Progress', color: 'bg-yellow-100 text-yellow-700', icon: '⏳' },
+            completed: { label: 'Completed', color: 'bg-green-100 text-green-700', icon: '✅' },
+            overdue: { label: 'Overdue', color: 'bg-red-100 text-red-700', icon: '⚠️' }
+        };
+
+        // Parses a simple CSV (handles quoted fields) - matches the structure of the existing
+        // education tracker spreadsheet: Course or Workshop Title; Completed; Month/Year Completed; 
+        // Est. Time to Complete; Host; Website Link
+        function parseCSV(text) {
+            // Detect delimiter (the source file uses semicolons)
+            const firstLine = text.split('\n')[0];
+            const delimiter = firstLine.includes(';') ? ';' : ',';
+            
+            const rows = [];
+            let row = [];
+            let field = '';
+            let inQuotes = false;
+            
+            for (let i = 0; i < text.length; i++) {
+                const char = text[i];
+                const next = text[i + 1];
+                
+                if (inQuotes) {
+                    if (char === '"' && next === '"') { field += '"'; i++; }
+                    else if (char === '"') { inQuotes = false; }
+                    else { field += char; }
+                } else {
+                    if (char === '"') inQuotes = true;
+                    else if (char === delimiter) { row.push(field); field = ''; }
+                    else if (char === '\n' || char === '\r') {
+                        if (char === '\r' && next === '\n') continue;
+                        row.push(field); field = '';
+                        if (row.some(c => c.trim() !== '')) rows.push(row);
+                        row = [];
+                    } else { field += char; }
+                }
+            }
+            if (field !== '' || row.length > 0) {
+                row.push(field);
+                if (row.some(c => c.trim() !== '')) rows.push(row);
+            }
+            return rows;
+        }
+        
+        // Map CSV header row to known field names (flexible matching)
+        function mapEducationCSVHeaders(headerRow) {
+            const map = {};
+            headerRow.forEach((header, i) => {
+                const h = header.trim().toLowerCase();
+                if (h.includes('course') || h.includes('workshop') || h.includes('title')) map.title = i;
+                else if (h.includes('completed') && !h.includes('month')) map.completedCheckbox = i;
+                else if (h.includes('month') || h.includes('year')) map.completedDate = i;
+                else if (h.includes('est') || h.includes('time to complete')) map.estTime = i;
+                else if (h.includes('host')) map.host = i;
+                else if (h.includes('website') || h.includes('link') || h.includes('url')) map.websiteLink = i;
+            });
+            return map;
+        }
+        
+        // Determine effective status for a progress record, factoring in annual recurrence
+        function getEducationStatus(course, progress) {
+            if (!progress || progress.status === 'not_started' || !progress.status) {
+                return 'not_started';
+            }
+            if (progress.status === 'in_progress') return 'in_progress';
+            
+            // status === 'completed'
+            if (course.recurringAnnual && progress.completedDate) {
+                const completed = new Date(progress.completedDate + '-01'); // YYYY-MM format
+                const now = new Date();
+                const oneYearLater = new Date(completed);
+                oneYearLater.setFullYear(oneYearLater.getFullYear() + 1);
+                if (now > oneYearLater) return 'overdue';
+            }
+            return 'completed';
+        }
+
         // Export a healthcare onboarding schedule to CSV (for Teams/Outlook/Google Calendar import)
         function exportScheduleToCSV(schedule) {
             const rows = [];
             rows.push(['Subject', 'Start Date', 'Start Time', 'End Date', 'End Time', 'Description', 'Categories']);
             
             schedule.items.forEach(item => {
-                const taskList = (item.tasks || []).map(t => t.title).join('; ');
+                const sortedTasks = sortTasksByTime(item.tasks);
+                const taskList = sortedTasks.map(t => t.time ? `${formatTime12hr(t.time)} - ${t.title}` : t.title).join('; ');
                 const journeyInfo = (item.journeyIds && item.journeyIds.length > 0) 
                     ? `${item.journeyIds.length} linked journey(s)` 
                     : 'None';
@@ -250,12 +367,15 @@
                 const d = new Date(item.date + 'T00:00:00');
                 const dateFormatted = `${d.getMonth() + 1}/${d.getDate()}/${d.getFullYear()}`;
                 
+                const startTime = formatTime12hr(item.startTime) || '9:00 AM';
+                const endTime = formatTime12hr(item.endTime) || '5:00 PM';
+                
                 rows.push([
                     `${schedule.position} Onboarding: Day ${item.dayNumber} - ${item.title}`,
                     dateFormatted,
-                    '9:00 AM',
+                    startTime,
                     dateFormatted,
-                    '5:00 PM',
+                    endTime,
                     description,
                     'Onboarding'
                 ]);
@@ -3219,7 +3339,7 @@
                     ...prev,
                     items: [
                         ...prev.items,
-                        { dayNumber: prev.items.length + 1, title: '', description: '', journeyIds: [], tasks: [] }
+                        { dayNumber: prev.items.length + 1, title: '', description: '', startTime: '09:00', endTime: '17:00', journeyIds: [], tasks: [] }
                     ]
                 }));
             };
@@ -3258,7 +3378,7 @@
                     ...prev,
                     items: prev.items.map((item, i) => {
                         if (i !== dayIndex) return item;
-                        return { ...item, tasks: [...(item.tasks || []), { id: `task_${Date.now()}`, title: '', duration: '' }] };
+                        return { ...item, tasks: [...(item.tasks || []), { id: `task_${Date.now()}`, title: '', duration: '', time: '' }] };
                     })
                 }));
             };
@@ -3397,6 +3517,27 @@
                                                     />
                                                 </div>
                                                 
+                                                <div className="grid grid-cols-2 gap-3">
+                                                    <div>
+                                                        <label className="block text-xs font-semibold text-gray-600 mb-1">Start Time</label>
+                                                        <input
+                                                            type="time"
+                                                            value={item.startTime || '09:00'}
+                                                            onChange={e => updateDayField(dayIndex, 'startTime', e.target.value)}
+                                                            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                                                        />
+                                                    </div>
+                                                    <div>
+                                                        <label className="block text-xs font-semibold text-gray-600 mb-1">End Time</label>
+                                                        <input
+                                                            type="time"
+                                                            value={item.endTime || '17:00'}
+                                                            onChange={e => updateDayField(dayIndex, 'endTime', e.target.value)}
+                                                            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                                                        />
+                                                    </div>
+                                                </div>
+                                                
                                                 {/* Journey Linking (Optional) */}
                                                 <div>
                                                     <label className="block text-xs font-semibold text-gray-600 mb-1">
@@ -3434,6 +3575,13 @@
                                                         {(item.tasks || []).map((task, taskIndex) => (
                                                             <div key={task.id || taskIndex} className="flex gap-2">
                                                                 <input
+                                                                    type="time"
+                                                                    value={task.time || ''}
+                                                                    onChange={e => updateTask(dayIndex, taskIndex, 'time', e.target.value)}
+                                                                    title="Time (optional)"
+                                                                    className="w-28 px-2 py-1.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                                                                />
+                                                                <input
                                                                     type="text"
                                                                     value={task.title}
                                                                     onChange={e => updateTask(dayIndex, taskIndex, 'title', e.target.value)}
@@ -3445,7 +3593,7 @@
                                                                     value={task.duration || ''}
                                                                     onChange={e => updateTask(dayIndex, taskIndex, 'duration', e.target.value)}
                                                                     placeholder="Duration"
-                                                                    className="w-28 px-3 py-1.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                                                                    className="w-24 px-3 py-1.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
                                                                 />
                                                                 <button
                                                                     onClick={() => removeTask(dayIndex, taskIndex)}
@@ -3591,8 +3739,10 @@
                         dayOfWeek: previewDates[i].dayOfWeek,
                         title: item.title,
                         description: item.description || '',
+                        startTime: item.startTime || '09:00',
+                        endTime: item.endTime || '17:00',
                         journeyIds: item.journeyIds || [],
-                        tasks: (item.tasks || []).map(t => ({ ...t, status: 'pending' })),
+                        tasks: sortTasksByTime(item.tasks || []).map(t => ({ ...t, status: 'pending' })),
                         scheduleItemStatus: 'pending'
                     }));
                     
@@ -3832,6 +3982,9 @@
                                             <div>
                                                 <span className="text-sm font-medium text-gray-700">
                                                     {formatDateDisplay(previewDates[i].date)}
+                                                </span>
+                                                <span className="text-xs text-gray-400 ml-2">
+                                                    {formatTime12hr(item.startTime || '09:00')}–{formatTime12hr(item.endTime || '17:00')}
                                                 </span>
                                                 <span className="text-sm text-gray-500 ml-2">— {item.title || `Day ${item.dayNumber}`}</span>
                                             </div>
@@ -4112,7 +4265,11 @@
                                                         {item.scheduleItemStatus === 'completed' ? '✅' : item.scheduleItemStatus === 'in_progress' ? '⏳' : '○'}
                                                         {' '}Day {item.dayNumber} - {item.title}
                                                     </div>
-                                                    <div className="text-xs text-gray-400">{formatDateDisplay(item.date)}</div>
+                                                    <div className="text-xs text-gray-400">
+                                                        {formatDateDisplay(item.date)}
+                                                        {' · '}
+                                                        {formatTime12hr(item.startTime || '09:00')}–{formatTime12hr(item.endTime || '17:00')}
+                                                    </div>
                                                 </div>
                                                 {item.journeyIds && item.journeyIds.length > 0 && (
                                                     <span className="text-xs bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full">
@@ -4122,9 +4279,10 @@
                                             </div>
                                             {item.tasks && item.tasks.length > 0 && (
                                                 <ul className="mt-2 space-y-1">
-                                                    {item.tasks.map((task, ti) => (
+                                                    {sortTasksByTime(item.tasks).map((task, ti) => (
                                                         <li key={ti} className="text-sm text-gray-600 flex items-center gap-2">
                                                             <span>{task.status === 'completed' ? '☑️' : '☐'}</span>
+                                                            {task.time && <span className="text-gray-400 font-mono text-xs">{formatTime12hr(task.time)}</span>}
                                                             {task.title} {task.duration && <span className="text-gray-400">({task.duration})</span>}
                                                         </li>
                                                     ))}
@@ -4150,6 +4308,1147 @@
                                 Close
                             </button>
                         </div>
+                    </div>
+                </div>
+            );
+        }
+        
+        // ============================================
+        // COURSE EDITOR MODAL
+        // ============================================
+        function CourseEditorModal({ course, onSave, onClose }) {
+            const [formData, setFormData] = useState(course);
+            const [saving, setSaving] = useState(false);
+            
+            const updateField = (field, value) => setFormData(prev => ({ ...prev, [field]: value }));
+            
+            const handleSave = async () => {
+                if (!formData.title.trim()) {
+                    alert('Please enter a course title');
+                    return;
+                }
+                setSaving(true);
+                await onSave(formData);
+                setSaving(false);
+            };
+            
+            return (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                    <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+                        <div className="sticky top-0 bg-white border-b border-gray-100 px-6 py-4 flex justify-between items-center z-10">
+                            <h2 className="text-xl font-bold text-gray-800">
+                                {course.id ? '✏️ Edit Course' : '📚 Add Course'}
+                            </h2>
+                            <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-2xl">✕</button>
+                        </div>
+                        
+                        <div className="p-6 space-y-4">
+                            <div>
+                                <label className="block text-sm font-semibold text-gray-700 mb-1">Course or Workshop Title *</label>
+                                <input
+                                    type="text"
+                                    value={formData.title}
+                                    onChange={e => updateField('title', e.target.value)}
+                                    placeholder="e.g. WHMIS Certification"
+                                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                                />
+                            </div>
+                            
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-sm font-semibold text-gray-700 mb-1">Host</label>
+                                    <input
+                                        type="text"
+                                        value={formData.host}
+                                        onChange={e => updateField('host', e.target.value)}
+                                        placeholder="e.g. WorkSafe Alberta"
+                                        className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-semibold text-gray-700 mb-1">Est. Time to Complete</label>
+                                    <input
+                                        type="text"
+                                        value={formData.estTimeToComplete}
+                                        onChange={e => updateField('estTimeToComplete', e.target.value)}
+                                        placeholder="e.g. 2 hours"
+                                        className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                                    />
+                                </div>
+                            </div>
+                            
+                            <div>
+                                <label className="block text-sm font-semibold text-gray-700 mb-1">Website Link</label>
+                                <input
+                                    type="text"
+                                    value={formData.websiteLink}
+                                    onChange={e => updateField('websiteLink', e.target.value)}
+                                    placeholder="https://..."
+                                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                                />
+                            </div>
+                            
+                            <div>
+                                <label className="block text-sm font-semibold text-gray-700 mb-1">Category (optional)</label>
+                                <input
+                                    type="text"
+                                    value={formData.category}
+                                    onChange={e => updateField('category', e.target.value)}
+                                    placeholder="e.g. Compliance, Clinical Skills"
+                                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                                />
+                            </div>
+                            
+                            <label className="flex items-start gap-2 cursor-pointer bg-purple-50 border border-purple-100 rounded-lg p-3">
+                                <input
+                                    type="checkbox"
+                                    checked={formData.recurringAnnual}
+                                    onChange={e => updateField('recurringAnnual', e.target.checked)}
+                                    className="w-4 h-4 mt-0.5"
+                                />
+                                <div>
+                                    <span className="text-sm font-medium text-gray-700 flex items-center gap-1">
+                                        <Icons.RefreshCw className="w-4 h-4" /> Required annually
+                                    </span>
+                                    <span className="text-xs text-gray-500">
+                                        Staff must re-complete this course every year (e.g. WHMIS, CPR renewal). 
+                                        Marked overdue automatically 1 year after last completion.
+                                    </span>
+                                </div>
+                            </label>
+                        </div>
+                        
+                        <div className="sticky bottom-0 bg-white border-t border-gray-100 px-6 py-4 flex justify-end gap-3">
+                            <button
+                                onClick={onClose}
+                                className="px-6 py-2 border border-gray-200 text-gray-600 rounded-lg hover:bg-gray-50 transition"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleSave}
+                                disabled={saving}
+                                className="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition font-semibold disabled:opacity-50"
+                            >
+                                {saving ? 'Saving...' : 'Save Course'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+        
+        // ============================================
+        // CSV IMPORT MODAL (Education Tracker)
+        // ============================================
+        function CSVImportModal({ onClose, onImported, showToast }) {
+            const [fileContent, setFileContent] = useState(null);
+            const [fileName, setFileName] = useState('');
+            const [parsedRows, setParsedRows] = useState([]);
+            const [headerMap, setHeaderMap] = useState({});
+            const [importing, setImporting] = useState(false);
+            const [error, setError] = useState('');
+            
+            const handleFileChange = (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                setFileName(file.name);
+                setError('');
+                
+                const reader = new FileReader();
+                reader.onload = (evt) => {
+                    try {
+                        const text = evt.target.result;
+                        const rows = parseCSV(text);
+                        if (rows.length < 2) {
+                            setError('CSV file appears to be empty or has no data rows');
+                            return;
+                        }
+                        const headers = rows[0];
+                        const map = mapEducationCSVHeaders(headers);
+                        
+                        if (map.title === undefined) {
+                            setError('Could not find a "Course or Workshop Title" column. Please check your CSV headers.');
+                            return;
+                        }
+                        
+                        const dataRows = rows.slice(1).filter(r => r[map.title] && r[map.title].trim());
+                        setHeaderMap(map);
+                        setParsedRows(dataRows);
+                        setFileContent(text);
+                    } catch (err) {
+                        setError('Failed to parse CSV: ' + err.message);
+                    }
+                };
+                reader.readAsText(file);
+            };
+            
+            const handleImport = async () => {
+                if (parsedRows.length === 0) return;
+                setImporting(true);
+                try {
+                    const { doc, setDoc, serverTimestamp } = window.firebaseModules;
+                    
+                    let imported = 0;
+                    for (const row of parsedRows) {
+                        const title = row[headerMap.title]?.trim();
+                        if (!title) continue;
+                        
+                        const id = `course_${title.toLowerCase().replace(/[^a-z0-9]+/g, '_').slice(0, 50)}_${Date.now()}_${imported}`;
+                        
+                        await setDoc(doc(db, 'education_courses', id), {
+                            title: title,
+                            host: headerMap.host !== undefined ? (row[headerMap.host] || '').trim() : '',
+                            websiteLink: headerMap.websiteLink !== undefined ? (row[headerMap.websiteLink] || '').trim() : '',
+                            estTimeToComplete: headerMap.estTime !== undefined ? (row[headerMap.estTime] || '').trim() : '',
+                            category: '',
+                            recurringAnnual: false,
+                            isActive: true,
+                            createdAt: serverTimestamp(),
+                            updatedAt: serverTimestamp()
+                        });
+                        imported++;
+                    }
+                    
+                    showToast(`✅ Imported ${imported} course${imported !== 1 ? 's' : ''} into the catalog!`);
+                    onImported();
+                } catch (err) {
+                    console.error('Error importing CSV:', err);
+                    showToast('Failed to import CSV: ' + err.message, 'error');
+                } finally {
+                    setImporting(false);
+                }
+            };
+            
+            return (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                    <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+                        <div className="sticky top-0 bg-white border-b border-gray-100 px-6 py-4 flex justify-between items-center z-10">
+                            <h2 className="text-xl font-bold text-gray-800">📤 Import Education Tracker CSV</h2>
+                            <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-2xl">✕</button>
+                        </div>
+                        
+                        <div className="p-6 space-y-4">
+                            <div className="bg-indigo-50 rounded-lg p-4 text-sm text-indigo-700">
+                                <p className="font-semibold mb-1">Expected columns (flexible matching):</p>
+                                <p>Course or Workshop Title, Completed, Month/Year Completed, Est. Time to Complete, Host, Website Link</p>
+                                <p className="mt-2 text-indigo-600">This imports courses into the shared catalog. Individual completion status is tracked separately per staff member.</p>
+                            </div>
+                            
+                            <div>
+                                <label className="block text-sm font-semibold text-gray-700 mb-2">Select CSV file</label>
+                                <input
+                                    type="file"
+                                    accept=".csv"
+                                    onChange={handleFileChange}
+                                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                                />
+                            </div>
+                            
+                            {error && (
+                                <div className="bg-red-50 border border-red-100 rounded-lg p-3 text-sm text-red-700">
+                                    {error}
+                                </div>
+                            )}
+                            
+                            {parsedRows.length > 0 && (
+                                <div>
+                                    <h3 className="font-bold text-gray-800 mb-2">
+                                        Preview ({parsedRows.length} course{parsedRows.length !== 1 ? 's' : ''} found)
+                                    </h3>
+                                    <div className="border border-gray-200 rounded-lg max-h-64 overflow-y-auto">
+                                        <table className="w-full text-sm">
+                                            <thead className="bg-gray-50 sticky top-0">
+                                                <tr>
+                                                    <th className="text-left px-3 py-2 font-semibold text-gray-600">Title</th>
+                                                    <th className="text-left px-3 py-2 font-semibold text-gray-600">Host</th>
+                                                    <th className="text-left px-3 py-2 font-semibold text-gray-600">Est. Time</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {parsedRows.slice(0, 50).map((row, i) => (
+                                                    <tr key={i} className="border-t border-gray-100">
+                                                        <td className="px-3 py-2 text-gray-800">{row[headerMap.title]}</td>
+                                                        <td className="px-3 py-2 text-gray-500">{headerMap.host !== undefined ? row[headerMap.host] : '—'}</td>
+                                                        <td className="px-3 py-2 text-gray-500">{headerMap.estTime !== undefined ? row[headerMap.estTime] : '—'}</td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                    {parsedRows.length > 50 && (
+                                        <p className="text-xs text-gray-400 mt-1">Showing first 50 of {parsedRows.length} rows</p>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                        
+                        <div className="sticky bottom-0 bg-white border-t border-gray-100 px-6 py-4 flex justify-end gap-3">
+                            <button
+                                onClick={onClose}
+                                className="px-6 py-2 border border-gray-200 text-gray-600 rounded-lg hover:bg-gray-50 transition"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleImport}
+                                disabled={importing || parsedRows.length === 0}
+                                className="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition font-semibold disabled:opacity-50"
+                            >
+                                {importing ? 'Importing...' : `Import ${parsedRows.length} Course${parsedRows.length !== 1 ? 's' : ''}`}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+        
+        // ============================================
+        // CONTINUING EDUCATION - MAIN COMPONENT
+        // ============================================
+        function ContinuingEducation({ showToast }) {
+            const [view, setView] = useState('library'); // library, assignments, progress
+            const [courses, setCourses] = useState([]);
+            const [users, setUsers] = useState([]);
+            const [assignments, setAssignments] = useState([]);
+            const [progress, setProgress] = useState([]);
+            const [loading, setLoading] = useState(true);
+            const [editingCourse, setEditingCourse] = useState(null);
+            const [showImportModal, setShowImportModal] = useState(false);
+            const [showAssignModal, setShowAssignModal] = useState(false);
+            
+            useEffect(() => {
+                loadAll();
+            }, []);
+            
+            const loadAll = async () => {
+                setLoading(true);
+                await Promise.all([loadCourses(), loadUsers(), loadAssignments(), loadProgress()]);
+                setLoading(false);
+            };
+            
+            const loadCourses = async () => {
+                try {
+                    const { collection, getDocs } = window.firebaseModules;
+                    const snapshot = await getDocs(collection(db, 'education_courses'));
+                    setCourses(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+                } catch (err) {
+                    console.error('Error loading courses:', err);
+                    setCourses([]);
+                }
+            };
+            
+            const loadUsers = async () => {
+                try {
+                    const { collection, getDocs } = window.firebaseModules;
+                    const snapshot = await getDocs(collection(db, 'users'));
+                    setUsers(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+                } catch (err) {
+                    console.error('Error loading users:', err);
+                    setUsers([]);
+                }
+            };
+            
+            const loadAssignments = async () => {
+                try {
+                    const { collection, getDocs } = window.firebaseModules;
+                    const snapshot = await getDocs(collection(db, 'education_assignments'));
+                    setAssignments(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+                } catch (err) {
+                    console.error('Error loading assignments:', err);
+                    setAssignments([]);
+                }
+            };
+            
+            const loadProgress = async () => {
+                try {
+                    const { collection, getDocs } = window.firebaseModules;
+                    const snapshot = await getDocs(collection(db, 'education_progress'));
+                    setProgress(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+                } catch (err) {
+                    console.error('Error loading progress:', err);
+                    setProgress([]);
+                }
+            };
+            
+            const saveCourse = async (courseData) => {
+                const { doc, setDoc, serverTimestamp } = window.firebaseModules;
+                try {
+                    const id = courseData.id || `course_${Date.now()}`;
+                    const dataToSave = { ...courseData };
+                    delete dataToSave.id;
+                    dataToSave.updatedAt = serverTimestamp();
+                    if (!courseData.id) dataToSave.createdAt = serverTimestamp();
+                    
+                    await setDoc(doc(db, 'education_courses', id), dataToSave, { merge: true });
+                    showToast(courseData.id ? '✅ Course updated!' : '✅ Course added!');
+                    setEditingCourse(null);
+                    loadCourses();
+                } catch (err) {
+                    console.error('Error saving course:', err);
+                    showToast('Failed to save course: ' + err.message, 'error');
+                }
+            };
+            
+            const deleteCourse = async (courseId) => {
+                if (!confirm('Delete this course from the catalog? This cannot be undone.')) return;
+                const { doc, deleteDoc } = window.firebaseModules;
+                try {
+                    await deleteDoc(doc(db, 'education_courses', courseId));
+                    showToast('🗑️ Course deleted');
+                    loadCourses();
+                } catch (err) {
+                    console.error('Error deleting course:', err);
+                    showToast('Failed to delete course', 'error');
+                }
+            };
+            
+            const createNewCourse = () => {
+                setEditingCourse({
+                    id: null,
+                    title: '',
+                    host: '',
+                    websiteLink: '',
+                    estTimeToComplete: '',
+                    category: '',
+                    recurringAnnual: false,
+                    isActive: true
+                });
+            };
+            
+            if (loading) {
+                return (
+                    <div className="p-8 flex items-center justify-center min-h-screen">
+                        <div className="text-center">
+                            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto mb-4"></div>
+                            <p className="text-gray-600">Loading continuing education...</p>
+                        </div>
+                    </div>
+                );
+            }
+            
+            return (
+                <div className="p-8">
+                    <div className="flex justify-between items-center mb-6">
+                        <div>
+                            <h1 className="text-3xl font-bold text-gray-800">📚 Continuing Education</h1>
+                            <p className="text-gray-500 mt-1">Course catalog, assignments & staff progress tracking</p>
+                        </div>
+                        <div className="flex gap-2">
+                            {view === 'library' && (
+                                <>
+                                    <button
+                                        onClick={() => setShowImportModal(true)}
+                                        className="flex items-center gap-2 px-4 py-3 bg-white border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 transition font-medium"
+                                    >
+                                        <Icons.Upload className="w-5 h-5" />
+                                        Import CSV
+                                    </button>
+                                    <button
+                                        onClick={createNewCourse}
+                                        className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-indigo-500 to-purple-600 text-white rounded-lg hover:from-indigo-600 hover:to-purple-700 transition font-semibold"
+                                    >
+                                        <Icons.Plus className="w-5 h-5" />
+                                        Add Course
+                                    </button>
+                                </>
+                            )}
+                            {view === 'progress' && (
+                                <button
+                                    onClick={() => setShowAssignModal(true)}
+                                    className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-lg hover:from-green-600 hover:to-emerald-700 transition font-semibold"
+                                >
+                                    <Icons.Plus className="w-5 h-5" />
+                                    Assign Courses
+                                </button>
+                            )}
+                        </div>
+                    </div>
+                    
+                    {/* Tab Switcher */}
+                    <div className="flex gap-2 mb-6 border-b border-gray-200">
+                        <button
+                            onClick={() => setView('library')}
+                            className={`px-6 py-3 font-semibold transition border-b-2 ${
+                                view === 'library' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700'
+                            }`}
+                        >
+                            Course Library ({courses.length})
+                        </button>
+                        <button
+                            onClick={() => setView('assignments')}
+                            className={`px-6 py-3 font-semibold transition border-b-2 ${
+                                view === 'assignments' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700'
+                            }`}
+                        >
+                            Required Courses ({assignments.length})
+                        </button>
+                        <button
+                            onClick={() => setView('progress')}
+                            className={`px-6 py-3 font-semibold transition border-b-2 ${
+                                view === 'progress' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700'
+                            }`}
+                        >
+                            Staff Progress
+                        </button>
+                    </div>
+                    
+                    {view === 'library' && (
+                        <CourseLibraryTab 
+                            courses={courses} 
+                            onEdit={setEditingCourse}
+                            onDelete={deleteCourse}
+                            onCreateNew={createNewCourse}
+                        />
+                    )}
+                    
+                    {view === 'assignments' && (
+                        <RequiredCoursesTab
+                            courses={courses}
+                            assignments={assignments}
+                            users={users}
+                            showToast={showToast}
+                            onRefresh={loadAssignments}
+                        />
+                    )}
+                    
+                    {view === 'progress' && (
+                        <StaffProgressTab
+                            courses={courses}
+                            users={users}
+                            assignments={assignments}
+                            progress={progress}
+                            showToast={showToast}
+                            onRefresh={loadProgress}
+                        />
+                    )}
+                    
+                    {editingCourse && (
+                        <CourseEditorModal
+                            course={editingCourse}
+                            onSave={saveCourse}
+                            onClose={() => setEditingCourse(null)}
+                        />
+                    )}
+                    
+                    {showImportModal && (
+                        <CSVImportModal
+                            onClose={() => setShowImportModal(false)}
+                            onImported={() => { setShowImportModal(false); loadCourses(); }}
+                            showToast={showToast}
+                        />
+                    )}
+                    
+                    {showAssignModal && (
+                        <AssignCoursesModal
+                            courses={courses}
+                            users={users}
+                            onClose={() => setShowAssignModal(false)}
+                            onAssigned={() => { setShowAssignModal(false); loadAssignments(); }}
+                            showToast={showToast}
+                        />
+                    )}
+                </div>
+            );
+        }
+        
+        // ============================================
+        // COURSE LIBRARY TAB
+        // ============================================
+        function CourseLibraryTab({ courses, onEdit, onDelete, onCreateNew }) {
+            if (courses.length === 0) {
+                return (
+                    <div className="bg-white rounded-xl shadow-sm p-12 text-center">
+                        <div className="text-5xl mb-4">📚</div>
+                        <h3 className="text-lg font-semibold text-gray-700 mb-2">No courses in the catalog yet</h3>
+                        <p className="text-gray-500 mb-4">Add courses individually or import your existing tracker CSV</p>
+                        <button
+                            onClick={onCreateNew}
+                            className="px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition font-semibold"
+                        >
+                            Add First Course
+                        </button>
+                    </div>
+                );
+            }
+            
+            return (
+                <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                    <table className="w-full">
+                        <thead className="bg-gray-50 border-b border-gray-100">
+                            <tr>
+                                <th className="text-left px-4 py-3 text-sm font-semibold text-gray-600">Course / Workshop</th>
+                                <th className="text-left px-4 py-3 text-sm font-semibold text-gray-600">Host</th>
+                                <th className="text-left px-4 py-3 text-sm font-semibold text-gray-600">Est. Time</th>
+                                <th className="text-left px-4 py-3 text-sm font-semibold text-gray-600">Recurrence</th>
+                                <th className="text-left px-4 py-3 text-sm font-semibold text-gray-600">Link</th>
+                                <th className="text-left px-4 py-3 text-sm font-semibold text-gray-600">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {courses.map(course => (
+                                <tr key={course.id} className="border-b border-gray-50 hover:bg-gray-50">
+                                    <td className="px-4 py-3">
+                                        <div className="font-medium text-gray-800">{course.title}</div>
+                                        {course.category && <div className="text-xs text-gray-400">{course.category}</div>}
+                                    </td>
+                                    <td className="px-4 py-3 text-sm text-gray-600">{course.host || '—'}</td>
+                                    <td className="px-4 py-3 text-sm text-gray-600">{course.estTimeToComplete || '—'}</td>
+                                    <td className="px-4 py-3">
+                                        {course.recurringAnnual ? (
+                                            <span className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded-full flex items-center gap-1 w-fit">
+                                                <Icons.RefreshCw className="w-3 h-3" /> Annual
+                                            </span>
+                                        ) : (
+                                            <span className="text-xs text-gray-400">One-time</span>
+                                        )}
+                                    </td>
+                                    <td className="px-4 py-3">
+                                        {course.websiteLink ? (
+                                            <a href={course.websiteLink} target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:text-indigo-800 text-sm">
+                                                Visit ↗
+                                            </a>
+                                        ) : '—'}
+                                    </td>
+                                    <td className="px-4 py-3">
+                                        <div className="flex gap-2">
+                                            <button
+                                                onClick={() => onEdit(JSON.parse(JSON.stringify(course)))}
+                                                className="px-3 py-1.5 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition"
+                                                title="Edit"
+                                            >
+                                                <Icons.Edit className="w-4 h-4" />
+                                            </button>
+                                            <button
+                                                onClick={() => onDelete(course.id)}
+                                                className="px-3 py-1.5 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition"
+                                                title="Delete"
+                                            >
+                                                <Icons.Trash className="w-4 h-4" />
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            );
+        }
+        
+        // ============================================
+        // REQUIRED COURSES TAB (Position & Individual Assignments)
+        // ============================================
+        function RequiredCoursesTab({ courses, assignments, users, showToast, onRefresh }) {
+            const [showModal, setShowModal] = useState(false);
+            
+            const removeAssignment = async (assignmentId) => {
+                if (!confirm('Remove this required course assignment?')) return;
+                const { doc, deleteDoc } = window.firebaseModules;
+                try {
+                    await deleteDoc(doc(db, 'education_assignments', assignmentId));
+                    showToast('🗑️ Assignment removed');
+                    onRefresh();
+                } catch (err) {
+                    console.error('Error removing assignment:', err);
+                    showToast('Failed to remove assignment', 'error');
+                }
+            };
+            
+            const positionAssignments = assignments.filter(a => a.assignType === 'position');
+            const individualAssignments = assignments.filter(a => a.assignType === 'individual');
+            
+            return (
+                <div className="space-y-6">
+                    <div className="flex justify-end">
+                        <button
+                            onClick={() => setShowModal(true)}
+                            className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-indigo-500 to-purple-600 text-white rounded-lg hover:from-indigo-600 hover:to-purple-700 transition font-semibold"
+                        >
+                            <Icons.Plus className="w-5 h-5" />
+                            Make Course Required
+                        </button>
+                    </div>
+                    
+                    {assignments.length === 0 ? (
+                        <div className="bg-white rounded-xl shadow-sm p-12 text-center">
+                            <div className="text-5xl mb-4">📋</div>
+                            <h3 className="text-lg font-semibold text-gray-700 mb-2">No required courses set</h3>
+                            <p className="text-gray-500 mb-4">Mark courses as required for specific positions or individuals</p>
+                            <button
+                                onClick={() => setShowModal(true)}
+                                className="px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition font-semibold"
+                            >
+                                Make Course Required
+                            </button>
+                        </div>
+                    ) : (
+                        <>
+                            {/* By Position */}
+                            <div>
+                                <h3 className="font-bold text-gray-800 mb-3">By Position</h3>
+                                {positionAssignments.length === 0 ? (
+                                    <p className="text-sm text-gray-400">No position-wide required courses</p>
+                                ) : (
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                        {HEALTHCARE_POSITIONS.map(pos => {
+                                            const posAssignments = positionAssignments.filter(a => a.position === pos.value);
+                                            if (posAssignments.length === 0) return null;
+                                            return (
+                                                <div key={pos.value} className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+                                                    <div className="font-semibold text-gray-700 mb-2">{pos.value}</div>
+                                                    <div className="space-y-1">
+                                                        {posAssignments.map(a => (
+                                                            <div key={a.id} className="flex items-center justify-between text-sm">
+                                                                <span className="text-gray-600 flex items-center gap-1">
+                                                                    {a.recurringAnnual && <Icons.RefreshCw className="w-3 h-3 text-purple-500" />}
+                                                                    {a.courseName}
+                                                                </span>
+                                                                <button onClick={() => removeAssignment(a.id)} className="text-red-400 hover:text-red-600 text-xs">✕</button>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                )}
+                            </div>
+                            
+                            {/* By Individual */}
+                            <div>
+                                <h3 className="font-bold text-gray-800 mb-3">By Individual</h3>
+                                {individualAssignments.length === 0 ? (
+                                    <p className="text-sm text-gray-400">No individually-required courses</p>
+                                ) : (
+                                    <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                                        <table className="w-full">
+                                            <thead className="bg-gray-50 border-b border-gray-100">
+                                                <tr>
+                                                    <th className="text-left px-4 py-2 text-sm font-semibold text-gray-600">Staff Member</th>
+                                                    <th className="text-left px-4 py-2 text-sm font-semibold text-gray-600">Course</th>
+                                                    <th className="text-left px-4 py-2 text-sm font-semibold text-gray-600"></th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {individualAssignments.map(a => (
+                                                    <tr key={a.id} className="border-b border-gray-50 last:border-b-0">
+                                                        <td className="px-4 py-2 text-sm text-gray-800">{a.userName}</td>
+                                                        <td className="px-4 py-2 text-sm text-gray-600 flex items-center gap-1">
+                                                            {a.recurringAnnual && <Icons.RefreshCw className="w-3 h-3 text-purple-500" />}
+                                                            {a.courseName}
+                                                        </td>
+                                                        <td className="px-4 py-2 text-right">
+                                                            <button onClick={() => removeAssignment(a.id)} className="text-red-400 hover:text-red-600 text-xs">✕ Remove</button>
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                )}
+                            </div>
+                        </>
+                    )}
+                    
+                    {showModal && (
+                        <AssignCoursesModal
+                            courses={courses}
+                            users={users}
+                            onClose={() => setShowModal(false)}
+                            onAssigned={() => { setShowModal(false); onRefresh(); }}
+                            showToast={showToast}
+                        />
+                    )}
+                </div>
+            );
+        }
+        
+        // ============================================
+        // ASSIGN COURSES MODAL
+        // ============================================
+        function AssignCoursesModal({ courses, users, onClose, onAssigned, showToast }) {
+            const [assignType, setAssignType] = useState('position'); // position | individual
+            const [selectedCourseIds, setSelectedCourseIds] = useState([]);
+            const [selectedPosition, setSelectedPosition] = useState('MOA');
+            const [selectedUserId, setSelectedUserId] = useState('');
+            const [saving, setSaving] = useState(false);
+            
+            const toggleCourse = (courseId) => {
+                setSelectedCourseIds(prev => 
+                    prev.includes(courseId) ? prev.filter(id => id !== courseId) : [...prev, courseId]
+                );
+            };
+            
+            const handleAssign = async () => {
+                if (selectedCourseIds.length === 0) {
+                    alert('Please select at least one course');
+                    return;
+                }
+                if (assignType === 'individual' && !selectedUserId) {
+                    alert('Please select a staff member');
+                    return;
+                }
+                
+                setSaving(true);
+                try {
+                    const { doc, setDoc, serverTimestamp } = window.firebaseModules;
+                    const selectedUser = users.find(u => u.id === selectedUserId);
+                    
+                    for (const courseId of selectedCourseIds) {
+                        const course = courses.find(c => c.id === courseId);
+                        if (!course) continue;
+                        
+                        const assignmentId = assignType === 'position'
+                            ? `assign_pos_${selectedPosition}_${courseId}`
+                            : `assign_user_${selectedUserId}_${courseId}`;
+                        
+                        const data = {
+                            courseId: courseId,
+                            courseName: course.title,
+                            recurringAnnual: course.recurringAnnual || false,
+                            assignType: assignType,
+                            assignedAt: serverTimestamp()
+                        };
+                        
+                        if (assignType === 'position') {
+                            data.position = selectedPosition;
+                        } else {
+                            data.userId = selectedUserId;
+                            data.userName = selectedUser?.displayName || selectedUser?.email || 'Unknown';
+                        }
+                        
+                        await setDoc(doc(db, 'education_assignments', assignmentId), data, { merge: true });
+                    }
+                    
+                    showToast(`✅ ${selectedCourseIds.length} course${selectedCourseIds.length !== 1 ? 's' : ''} made required!`);
+                    onAssigned();
+                } catch (err) {
+                    console.error('Error assigning courses:', err);
+                    showToast('Failed to assign courses: ' + err.message, 'error');
+                } finally {
+                    setSaving(false);
+                }
+            };
+            
+            return (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                    <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+                        <div className="sticky top-0 bg-white border-b border-gray-100 px-6 py-4 flex justify-between items-center z-10">
+                            <h2 className="text-xl font-bold text-gray-800">📋 Make Courses Required</h2>
+                            <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-2xl">✕</button>
+                        </div>
+                        
+                        <div className="p-6 space-y-4">
+                            {/* Assign Type */}
+                            <div>
+                                <label className="block text-sm font-semibold text-gray-700 mb-2">Apply To</label>
+                                <div className="flex gap-2">
+                                    <button
+                                        onClick={() => setAssignType('position')}
+                                        className={`flex-1 px-4 py-3 rounded-lg text-sm font-medium transition border-2 ${
+                                            assignType === 'position' 
+                                                ? 'border-indigo-600 bg-indigo-50 text-indigo-700' 
+                                                : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'
+                                        }`}
+                                    >
+                                        <div className="text-lg mb-1">👥</div>
+                                        Entire Position
+                                        <div className="text-xs opacity-70 mt-0.5">All staff in a role</div>
+                                    </button>
+                                    <button
+                                        onClick={() => setAssignType('individual')}
+                                        className={`flex-1 px-4 py-3 rounded-lg text-sm font-medium transition border-2 ${
+                                            assignType === 'individual' 
+                                                ? 'border-indigo-600 bg-indigo-50 text-indigo-700' 
+                                                : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'
+                                        }`}
+                                    >
+                                        <div className="text-lg mb-1">👤</div>
+                                        Specific Person
+                                        <div className="text-xs opacity-70 mt-0.5">Individual staff member</div>
+                                    </button>
+                                </div>
+                            </div>
+                            
+                            {/* Position Selector */}
+                            {assignType === 'position' && (
+                                <div>
+                                    <label className="block text-sm font-semibold text-gray-700 mb-1">Position</label>
+                                    <select
+                                        value={selectedPosition}
+                                        onChange={e => setSelectedPosition(e.target.value)}
+                                        className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                                    >
+                                        {HEALTHCARE_POSITIONS.map(pos => (
+                                            <option key={pos.value} value={pos.value}>{pos.label}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                            )}
+                            
+                            {/* User Selector */}
+                            {assignType === 'individual' && (
+                                <div>
+                                    <label className="block text-sm font-semibold text-gray-700 mb-1">Staff Member</label>
+                                    <select
+                                        value={selectedUserId}
+                                        onChange={e => setSelectedUserId(e.target.value)}
+                                        className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                                    >
+                                        <option value="">Select a staff member...</option>
+                                        {users.map(u => (
+                                            <option key={u.id} value={u.id}>{u.displayName || u.email}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                            )}
+                            
+                            {/* Course Selection */}
+                            <div>
+                                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                                    Select Courses ({selectedCourseIds.length} selected)
+                                </label>
+                                {courses.length === 0 ? (
+                                    <p className="text-sm text-gray-400">No courses in the catalog yet. Add courses first.</p>
+                                ) : (
+                                    <div className="border border-gray-200 rounded-lg max-h-64 overflow-y-auto">
+                                        {courses.map(course => {
+                                            const selected = selectedCourseIds.includes(course.id);
+                                            return (
+                                                <button
+                                                    key={course.id}
+                                                    onClick={() => toggleCourse(course.id)}
+                                                    className={`w-full flex items-center justify-between px-4 py-2.5 border-b border-gray-50 last:border-b-0 transition text-left ${
+                                                        selected ? 'bg-indigo-50' : 'hover:bg-gray-50'
+                                                    }`}
+                                                >
+                                                    <div className="flex items-center gap-2">
+                                                        <input type="checkbox" checked={selected} onChange={() => {}} className="w-4 h-4" />
+                                                        <span className="text-sm text-gray-800">{course.title}</span>
+                                                        {course.recurringAnnual && <Icons.RefreshCw className="w-3 h-3 text-purple-500" />}
+                                                    </div>
+                                                    {course.host && <span className="text-xs text-gray-400">{course.host}</span>}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                        
+                        <div className="sticky bottom-0 bg-white border-t border-gray-100 px-6 py-4 flex justify-end gap-3">
+                            <button
+                                onClick={onClose}
+                                className="px-6 py-2 border border-gray-200 text-gray-600 rounded-lg hover:bg-gray-50 transition"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleAssign}
+                                disabled={saving || selectedCourseIds.length === 0}
+                                className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition font-semibold disabled:opacity-50"
+                            >
+                                {saving ? 'Assigning...' : 'Make Required'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+        
+        // ============================================
+        // STAFF PROGRESS TAB (Manager View)
+        // ============================================
+        function StaffProgressTab({ courses, users, assignments, progress, showToast, onRefresh }) {
+            const [selectedUserId, setSelectedUserId] = useState('all');
+            const [filterStatus, setFilterStatus] = useState('all');
+            
+            // Build the effective "required course" list per user
+            const getRequiredCoursesForUser = (user) => {
+                const userPosition = (user.specialty || user.position || '').toLowerCase();
+                const byPosition = assignments.filter(a => a.assignType === 'position' && a.position.toLowerCase() === userPosition);
+                const byIndividual = assignments.filter(a => a.assignType === 'individual' && a.userId === user.id);
+                const combined = [...byPosition, ...byIndividual];
+                // Dedupe by courseId
+                const seen = new Set();
+                return combined.filter(a => {
+                    if (seen.has(a.courseId)) return false;
+                    seen.add(a.courseId);
+                    return true;
+                });
+            };
+            
+            const getProgressRecord = (userId, courseId) => {
+                return progress.find(p => p.userId === userId && p.courseId === courseId);
+            };
+            
+            // Build summary stats
+            const studentUsers = users.filter(u => u.role !== 'trainer');
+            
+            const allRows = [];
+            studentUsers.forEach(user => {
+                const required = getRequiredCoursesForUser(user);
+                required.forEach(assignment => {
+                    const course = courses.find(c => c.id === assignment.courseId);
+                    if (!course) return;
+                    const progressRecord = getProgressRecord(user.id, assignment.courseId);
+                    const status = getEducationStatus(course, progressRecord);
+                    allRows.push({ user, course, assignment, progressRecord, status });
+                });
+            });
+            
+            const filteredRows = allRows.filter(row => {
+                if (selectedUserId !== 'all' && row.user.id !== selectedUserId) return false;
+                if (filterStatus !== 'all' && row.status !== filterStatus) return false;
+                return true;
+            });
+            
+            const summary = {
+                total: allRows.length,
+                completed: allRows.filter(r => r.status === 'completed').length,
+                inProgress: allRows.filter(r => r.status === 'in_progress').length,
+                overdue: allRows.filter(r => r.status === 'overdue').length,
+                notStarted: allRows.filter(r => r.status === 'not_started').length
+            };
+            
+            const updateProgressStatus = async (userId, userName, courseId, courseName, newStatus) => {
+                const { doc, setDoc, serverTimestamp } = window.firebaseModules;
+                try {
+                    const id = `${userId}_${courseId}`;
+                    const data = {
+                        userId, userName, courseId, courseName,
+                        status: newStatus,
+                        updatedAt: serverTimestamp()
+                    };
+                    if (newStatus === 'completed') {
+                        const now = new Date();
+                        data.completedDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+                    }
+                    await setDoc(doc(db, 'education_progress', id), data, { merge: true });
+                    showToast('✅ Progress updated!');
+                    onRefresh();
+                } catch (err) {
+                    console.error('Error updating progress:', err);
+                    showToast('Failed to update progress', 'error');
+                }
+            };
+            
+            if (allRows.length === 0) {
+                return (
+                    <div className="bg-white rounded-xl shadow-sm p-12 text-center">
+                        <div className="text-5xl mb-4">📊</div>
+                        <h3 className="text-lg font-semibold text-gray-700 mb-2">No required courses assigned yet</h3>
+                        <p className="text-gray-500">Go to "Required Courses" to assign courses to positions or staff members</p>
+                    </div>
+                );
+            }
+            
+            return (
+                <div>
+                    {/* Summary Cards */}
+                    <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
+                        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+                            <div className="text-2xl font-bold text-gray-800">{summary.total}</div>
+                            <div className="text-sm text-gray-500">Total Required</div>
+                        </div>
+                        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+                            <div className="text-2xl font-bold text-green-600">{summary.completed}</div>
+                            <div className="text-sm text-gray-500">Completed</div>
+                        </div>
+                        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+                            <div className="text-2xl font-bold text-yellow-600">{summary.inProgress}</div>
+                            <div className="text-sm text-gray-500">In Progress</div>
+                        </div>
+                        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+                            <div className="text-2xl font-bold text-gray-400">{summary.notStarted}</div>
+                            <div className="text-sm text-gray-500">Not Started</div>
+                        </div>
+                        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+                            <div className="text-2xl font-bold text-red-600">{summary.overdue}</div>
+                            <div className="text-sm text-gray-500">Overdue</div>
+                        </div>
+                    </div>
+                    
+                    {/* Filters */}
+                    <div className="flex gap-3 mb-4 flex-wrap">
+                        <select
+                            value={selectedUserId}
+                            onChange={e => setSelectedUserId(e.target.value)}
+                            className="px-4 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                        >
+                            <option value="all">All Staff</option>
+                            {studentUsers.map(u => (
+                                <option key={u.id} value={u.id}>{u.displayName || u.email}</option>
+                            ))}
+                        </select>
+                        
+                        <div className="flex gap-2">
+                            {['all', 'completed', 'in_progress', 'not_started', 'overdue'].map(s => (
+                                <button
+                                    key={s}
+                                    onClick={() => setFilterStatus(s)}
+                                    className={`px-3 py-2 rounded-lg text-sm font-medium transition ${
+                                        filterStatus === s ? 'bg-indigo-600 text-white' : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
+                                    }`}
+                                >
+                                    {s === 'all' ? 'All' : EDUCATION_STATUS[s].label}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                    
+                    {/* Table */}
+                    <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                        <table className="w-full">
+                            <thead className="bg-gray-50 border-b border-gray-100">
+                                <tr>
+                                    <th className="text-left px-4 py-3 text-sm font-semibold text-gray-600">Staff Member</th>
+                                    <th className="text-left px-4 py-3 text-sm font-semibold text-gray-600">Course</th>
+                                    <th className="text-left px-4 py-3 text-sm font-semibold text-gray-600">Completed</th>
+                                    <th className="text-left px-4 py-3 text-sm font-semibold text-gray-600">Status</th>
+                                    <th className="text-left px-4 py-3 text-sm font-semibold text-gray-600">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {filteredRows.map((row, i) => {
+                                    const statusInfo = EDUCATION_STATUS[row.status];
+                                    return (
+                                        <tr key={i} className="border-b border-gray-50 hover:bg-gray-50">
+                                            <td className="px-4 py-3">
+                                                <div className="font-medium text-gray-800">{row.user.displayName || row.user.email}</div>
+                                                <div className="text-xs text-gray-400">{row.user.specialty || row.user.position || ''}</div>
+                                            </td>
+                                            <td className="px-4 py-3 text-sm text-gray-600">
+                                                <div className="flex items-center gap-1">
+                                                    {row.assignment.recurringAnnual && <Icons.RefreshCw className="w-3 h-3 text-purple-500" />}
+                                                    {row.course.title}
+                                                </div>
+                                            </td>
+                                            <td className="px-4 py-3 text-sm text-gray-500">
+                                                {row.progressRecord?.completedDate || '—'}
+                                            </td>
+                                            <td className="px-4 py-3">
+                                                <span className={`text-xs px-2 py-1 rounded-full font-medium ${statusInfo.color}`}>
+                                                    {statusInfo.icon} {statusInfo.label}
+                                                </span>
+                                            </td>
+                                            <td className="px-4 py-3">
+                                                <select
+                                                    value={row.progressRecord?.status || 'not_started'}
+                                                    onChange={e => updateProgressStatus(row.user.id, row.user.displayName || row.user.email, row.course.id, row.course.title, e.target.value)}
+                                                    className="px-2 py-1 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                                                >
+                                                    <option value="not_started">Not Started</option>
+                                                    <option value="in_progress">In Progress</option>
+                                                    <option value="completed">Completed</option>
+                                                </select>
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
                     </div>
                 </div>
             );
@@ -4235,7 +5534,7 @@
                     includeWeekends: false,
                     description: '',
                     items: [
-                        { dayNumber: 1, title: '', description: '', journeyIds: [], tasks: [] }
+                        { dayNumber: 1, title: '', description: '', startTime: '09:00', endTime: '17:00', journeyIds: [], tasks: [] }
                     ],
                     isActive: true
                 });
@@ -4980,6 +6279,16 @@
                             </button>
                             
                             <button
+                                onClick={() => setCurrentView('continuingeducation')}
+                                className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition ${
+                                    currentView === 'continuingeducation' ? 'bg-white bg-opacity-20' : 'hover:bg-white hover:bg-opacity-10'
+                                }`}
+                            >
+                                <Icons.BookOpen className="w-5 h-5" />
+                                Continuing Education
+                            </button>
+                            
+                            <button
                                 onClick={() => setCurrentView('analytics')}
                                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition ${
                                     currentView === 'analytics' ? 'bg-white bg-opacity-20' : 'hover:bg-white hover:bg-opacity-10'
@@ -5037,6 +6346,7 @@
                         {currentView === 'users' && <UserManagement showToast={showToast} />}
                         {currentView === 'quizgames' && <QuizGames showToast={showToast} />}
                         {currentView === 'calendartemplates' && <CalendarTemplates showToast={showToast} />}
+                        {currentView === 'continuingeducation' && <ContinuingEducation showToast={showToast} />}
                         {currentView === 'analytics' && <Analytics />}
                         {currentView === 'settings' && <SpecialtyManagement showToast={showToast} />}
                     </div>

@@ -32,6 +32,23 @@
             serverTimestamp,
             sendPasswordResetEmail
         };
+        window.firebaseModulesReady = true;
+        window.dispatchEvent(new Event('firebase-modules-ready'));
+    </script>
+    
+    <script>
+        // Global error catcher - shows JS errors directly on page instead of a blank white screen
+        window.addEventListener('error', function(e) {
+            const root = document.getElementById('root');
+            if (root && !root.hasChildNodes()) {
+                root.innerHTML = 
+                    '<div style="padding:40px;font-family:sans-serif;color:#b91c1c;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;margin:40px;">' +
+                    '<h2 style="margin-top:0;">Page Error</h2>' +
+                    '<p><strong>' + (e.message || 'Unknown error') + '</strong></p>' +
+                    '<p style="font-size:13px;">' + (e.filename || '') + (e.lineno ? ':' + e.lineno : '') + '</p>' +
+                    '</div>';
+            }
+        });
     </script>
     
     <!-- React -->
@@ -73,6 +90,15 @@
         };
         
         // Initialize Firebase
+        if (!window.firebaseModules) {
+            document.getElementById('root').innerHTML = 
+                '<div style="padding:40px;font-family:sans-serif;color:#b91c1c;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;margin:40px;">' +
+                '<h2 style="margin-top:0;">Firebase failed to load</h2>' +
+                '<p>The Firebase SDK modules did not load before the app tried to start. This is usually caused by an ad blocker, tracking prevention, or a network issue blocking gstatic.com.</p>' +
+                '<p style="font-size:13px;color:#7f1d1d;">Try: disabling tracking prevention/ad blocker for this page, using a different browser, or checking your internet connection, then refresh.</p>' +
+                '</div>';
+            throw new Error('window.firebaseModules is not available - Firebase SDK did not load');
+        }
         const { initializeApp, getAuth, getFirestore } = window.firebaseModules;
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);

@@ -369,7 +369,7 @@
         // ============================================
         // TRAINING SCHEDULE VIEW (Onboarding Calendar)
         // ============================================
-        function TrainingScheduleView({ user, userProfile, onBack }) {
+        function TrainingScheduleView({ user, userProfile, onBack, availableJourneys, onOpenJourney }) {
             const [allSchedules, setAllSchedules] = useState([]);
             const [schedule, setSchedule] = useState(null);
             const [loading, setLoading] = useState(true);
@@ -441,6 +441,7 @@
                 try {
                     await updateDoc(doc(db, 'healthcare_schedules', schedule.id), { items: updatedItems });
                     setSchedule(prev => ({ ...prev, items: updatedItems }));
+                    setAllSchedules(prev => prev.map(s => s.id === schedule.id ? { ...s, items: updatedItems } : s));
                 } catch (err) {
                     console.error('Error updating task:', err);
                 }
@@ -460,6 +461,7 @@
                 try {
                     await updateDoc(doc(db, 'healthcare_schedules', schedule.id), { items: updatedItems });
                     setSchedule(prev => ({ ...prev, items: updatedItems }));
+                    setAllSchedules(prev => prev.map(s => s.id === schedule.id ? { ...s, items: updatedItems } : s));
                 } catch (err) {
                     console.error('Error marking day complete:', err);
                 }
@@ -638,8 +640,30 @@
                                         {selectedItem.journeyIds && selectedItem.journeyIds.length > 0 && (
                                             <div className="mb-4">
                                                 <h4 className="font-semibold text-gray-700 mb-2">Related Training</h4>
-                                                <div className="bg-indigo-50 rounded-lg p-3 text-sm text-indigo-700">
-                                                    {selectedItem.journeyIds.length} linked journey{selectedItem.journeyIds.length !== 1 ? 's' : ''} — go to the Dashboard to complete {selectedItem.journeyIds.length !== 1 ? 'them' : 'it'}.
+                                                <div className="space-y-2">
+                                                    {selectedItem.journeyIds.map(journeyId => {
+                                                        const journey = (availableJourneys || []).find(j => j.id === journeyId);
+                                                        if (!journey) {
+                                                            return (
+                                                                <div key={journeyId} className="bg-yellow-50 border border-yellow-100 rounded-lg p-3 text-sm text-yellow-700">
+                                                                    A linked journey isn't currently available to you. Check with your manager.
+                                                                </div>
+                                                            );
+                                                        }
+                                                        return (
+                                                            <button
+                                                                key={journeyId}
+                                                                onClick={() => onOpenJourney(journeyId)}
+                                                                className="w-full flex items-center justify-between bg-indigo-50 hover:bg-indigo-100 rounded-lg p-3 text-left transition"
+                                                            >
+                                                                <div>
+                                                                    <div className="text-sm font-semibold text-indigo-700">🗺️ {journey.title || 'Untitled Journey'}</div>
+                                                                    <div className="text-xs text-indigo-500">Click to open this journey</div>
+                                                                </div>
+                                                                <ChevronRight className="w-5 h-5 text-indigo-400" />
+                                                            </button>
+                                                        );
+                                                    })}
                                                 </div>
                                             </div>
                                         )}
@@ -1018,6 +1042,16 @@
                         user={user}
                         userProfile={userProfile}
                         onBack={() => setCurrentView('dashboard')}
+                        availableJourneys={availableJourneys}
+                        onOpenJourney={(journeyId) => {
+                            const journey = availableJourneys.find(j => j.id === journeyId);
+                            if (journey) {
+                                selectJourney(journey);
+                            } else {
+                                // Journey not visible to this student (e.g. specialty mismatch) - fall back to dashboard
+                                setCurrentView('dashboard');
+                            }
+                        }}
                     />
                 );
             }

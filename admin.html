@@ -4067,6 +4067,19 @@
         function SchedulesList({ schedules, templates, onViewSchedule, onRefresh, showToast }) {
             const [filterStatus, setFilterStatus] = useState('all');
             
+            const unassignSchedule = async (schedule) => {
+                if (!confirm(`Unassign "${schedule.templateName}" from ${schedule.employeeName}? This will permanently delete their progress on this schedule.`)) return;
+                const { doc, deleteDoc } = window.firebaseModules;
+                try {
+                    await deleteDoc(doc(db, 'healthcare_schedules', schedule.id));
+                    showToast('🗑️ Schedule unassigned');
+                    onRefresh();
+                } catch (err) {
+                    console.error('Error unassigning schedule:', err);
+                    showToast('Failed to unassign schedule: ' + err.message, 'error');
+                }
+            };
+            
             const calculateProgress = (schedule) => {
                 const total = schedule.items.length;
                 const completed = schedule.items.filter(item => item.scheduleItemStatus === 'completed').length;
@@ -4208,6 +4221,13 @@
                                                         >
                                                             <Icons.Download className="w-4 h-4" /> CSV
                                                         </button>
+                                                        <button
+                                                            onClick={() => unassignSchedule(schedule)}
+                                                            className="px-3 py-1.5 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition text-sm flex items-center gap-1"
+                                                            title="Unassign"
+                                                        >
+                                                            <Icons.Trash className="w-4 h-4" /> Unassign
+                                                        </button>
                                                     </div>
                                                 </td>
                                             </tr>
@@ -4224,11 +4244,24 @@
         // ============================================
         // SCHEDULE DETAIL MODAL
         // ============================================
-        function ScheduleDetailModal({ schedule, onClose }) {
+        function ScheduleDetailModal({ schedule, onClose, onUnassigned, showToast }) {
             const calculateProgress = () => {
                 const total = schedule.items.length;
                 const completed = schedule.items.filter(item => item.scheduleItemStatus === 'completed').length;
                 return total > 0 ? Math.round((completed / total) * 100) : 0;
+            };
+            
+            const handleUnassign = async () => {
+                if (!confirm(`Unassign "${schedule.templateName}" from ${schedule.employeeName}? This will permanently delete their progress on this schedule.`)) return;
+                const { doc, deleteDoc } = window.firebaseModules;
+                try {
+                    await deleteDoc(doc(db, 'healthcare_schedules', schedule.id));
+                    showToast('🗑️ Schedule unassigned');
+                    onUnassigned();
+                } catch (err) {
+                    console.error('Error unassigning schedule:', err);
+                    showToast('Failed to unassign schedule: ' + err.message, 'error');
+                }
             };
             
             return (
@@ -4304,19 +4337,27 @@
                             </div>
                         </div>
                         
-                        <div className="sticky bottom-0 bg-white border-t border-gray-100 px-6 py-4 flex justify-end gap-3">
+                        <div className="sticky bottom-0 bg-white border-t border-gray-100 px-6 py-4 flex justify-between items-center">
                             <button
-                                onClick={() => exportScheduleToCSV(schedule)}
-                                className="px-4 py-2 bg-indigo-50 text-indigo-700 rounded-lg hover:bg-indigo-100 transition font-medium flex items-center gap-2"
+                                onClick={handleUnassign}
+                                className="px-4 py-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition font-medium flex items-center gap-2"
                             >
-                                <Icons.Download className="w-4 h-4" /> Export CSV
+                                <Icons.Trash className="w-4 h-4" /> Unassign
                             </button>
-                            <button
-                                onClick={onClose}
-                                className="px-6 py-2 border border-gray-200 text-gray-600 rounded-lg hover:bg-gray-50 transition"
-                            >
-                                Close
-                            </button>
+                            <div className="flex gap-3">
+                                <button
+                                    onClick={() => exportScheduleToCSV(schedule)}
+                                    className="px-4 py-2 bg-indigo-50 text-indigo-700 rounded-lg hover:bg-indigo-100 transition font-medium flex items-center gap-2"
+                                >
+                                    <Icons.Download className="w-4 h-4" /> Export CSV
+                                </button>
+                                <button
+                                    onClick={onClose}
+                                    className="px-6 py-2 border border-gray-200 text-gray-600 rounded-lg hover:bg-gray-50 transition"
+                                >
+                                    Close
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -5857,6 +5898,8 @@
                         <ScheduleDetailModal
                             schedule={viewingSchedule}
                             onClose={() => setViewingSchedule(null)}
+                            onUnassigned={() => { setViewingSchedule(null); loadSchedules(); }}
+                            showToast={showToast}
                         />
                     )}
                 </div>

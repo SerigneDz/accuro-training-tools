@@ -370,6 +370,7 @@
         // TRAINING SCHEDULE VIEW (Onboarding Calendar)
         // ============================================
         function TrainingScheduleView({ user, userProfile, onBack }) {
+            const [allSchedules, setAllSchedules] = useState([]);
             const [schedule, setSchedule] = useState(null);
             const [loading, setLoading] = useState(true);
             const [selectedDayIndex, setSelectedDayIndex] = useState(null);
@@ -386,25 +387,33 @@
                         query(collection(db, 'healthcare_schedules'), where('employeeId', '==', user.uid))
                     );
                     if (!snapshot.empty) {
-                        // Most recent / active schedule
                         const schedules = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-                        const active = schedules.find(s => s.status === 'active') || schedules[0];
-                        setSchedule(active);
-                        
-                        // Auto-select today's item, or first incomplete one
-                        const todayStr = new Date().toISOString().split('T')[0];
-                        const todayIdx = active.items.findIndex(item => item.date === todayStr);
-                        if (todayIdx >= 0) {
-                            setSelectedDayIndex(todayIdx);
-                        } else {
-                            const firstIncomplete = active.items.findIndex(item => item.scheduleItemStatus !== 'completed');
-                            setSelectedDayIndex(firstIncomplete >= 0 ? firstIncomplete : 0);
-                        }
+                        // Show active schedules first, most recently started first
+                        schedules.sort((a, b) => {
+                            if (a.status === 'active' && b.status !== 'active') return -1;
+                            if (b.status === 'active' && a.status !== 'active') return 1;
+                            return (b.startDate || '').localeCompare(a.startDate || '');
+                        });
+                        setAllSchedules(schedules);
+                        selectSchedule(schedules[0]);
                     }
                 } catch (err) {
                     console.error('Error loading training schedule:', err);
                 } finally {
                     setLoading(false);
+                }
+            };
+            
+            const selectSchedule = (sched) => {
+                setSchedule(sched);
+                // Auto-select today's item, or first incomplete one
+                const todayStr = new Date().toISOString().split('T')[0];
+                const todayIdx = sched.items.findIndex(item => item.date === todayStr);
+                if (todayIdx >= 0) {
+                    setSelectedDayIndex(todayIdx);
+                } else {
+                    const firstIncomplete = sched.items.findIndex(item => item.scheduleItemStatus !== 'completed');
+                    setSelectedDayIndex(firstIncomplete >= 0 ? firstIncomplete : 0);
                 }
             };
             
@@ -491,6 +500,24 @@
                     <Header title="📅 Training Schedule" onBack={onBack} userProfile={userProfile} />
                     
                     <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+                        {/* Schedule Switcher (only shown if multiple schedules assigned) */}
+                        {allSchedules.length > 1 && (
+                            <div className="mb-4 flex items-center gap-3">
+                                <label className="text-sm font-semibold text-gray-600">Viewing:</label>
+                                <select
+                                    value={schedule.id}
+                                    onChange={e => selectSchedule(allSchedules.find(s => s.id === e.target.value))}
+                                    className="px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                                >
+                                    {allSchedules.map(s => (
+                                        <option key={s.id} value={s.id}>
+                                            {s.templateName} ({formatDateDisplay(s.startDate)}) {s.status !== 'active' ? `- ${s.status}` : ''}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                        )}
+                        
                         {/* Progress Overview */}
                         <div className="bg-white rounded-2xl shadow-sm p-6 mb-6">
                             <div className="flex flex-wrap justify-between items-center gap-4 mb-3">
@@ -680,15 +707,21 @@
                     
                     const [coursesSnap, posAssignSnap, indivAssignSnap, progressSnap] = await Promise.all([
                         getDocs(collection(db, 'education_courses')),
-                        getDocs(query(collection(db, 'education_assignments'), where('assignType', '==', 'position'), where('position', '==', userProfile.specialty))),
+                        getDocs(query(collection(db, 'education_assignments'), where('assignType', '==', 'position'))),
                         getDocs(query(collection(db, 'education_assignments'), where('assignType', '==', 'individual'), where('userId', '==', user.uid))),
                         getDocs(query(collection(db, 'education_progress'), where('userId', '==', user.uid)))
                     ]);
                     
                     setCourses(coursesSnap.docs.map(d => ({ id: d.id, ...d.data() })));
                     
+                    // Filter position assignments case-insensitively against the student's specialty
+                    const myPosition = (userProfile.specialty || '').toLowerCase();
+                    const posAssignments = posAssignSnap.docs
+                        .map(d => ({ id: d.id, ...d.data() }))
+                        .filter(a => (a.position || '').toLowerCase() === myPosition);
+                    
                     const allAssignments = [
-                        ...posAssignSnap.docs.map(d => ({ id: d.id, ...d.data() })),
+                        ...posAssignments,
                         ...indivAssignSnap.docs.map(d => ({ id: d.id, ...d.data() }))
                     ];
                     // Dedupe by courseId

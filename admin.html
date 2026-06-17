@@ -368,7 +368,7 @@
                 const description = [
                     `Tasks: ${taskList || 'None'}`,
                     `Linked Journeys: ${journeyInfo}`,
-                    `Position: ${schedule.position}`,
+                    `Specialty: ${(schedule.specialties || []).join(', ')}`,
                     `Employee: ${schedule.employeeName}`,
                     item.description ? `Notes: ${item.description}` : ''
                 ].filter(Boolean).join('\n');
@@ -381,7 +381,7 @@
                 const endTime = formatTime12hr(item.endTime) || '5:00 PM';
                 
                 rows.push([
-                    `${schedule.position} Onboarding: Day ${item.dayNumber} - ${item.title}`,
+                    `${(schedule.specialties || []).join('/')} Onboarding: Day ${item.dayNumber} - ${item.title}`,
                     dateFormatted,
                     startTime,
                     dateFormatted,
@@ -3336,7 +3336,104 @@
         // ============================================
         // TEMPLATE EDITOR MODAL
         // ============================================
-        function TemplateEditorModal({ template, journeys, onSave, onClose }) {
+        // ============================================
+        // REUSABLE MULTI-SELECT DROPDOWN (search + checkbox toggle + chips)
+        // ============================================
+        function MultiSelectDropdown({ options, selectedValues, onChange, placeholder, label }) {
+            const [isOpen, setIsOpen] = useState(false);
+            const [searchQuery, setSearchQuery] = useState('');
+            const containerRef = useRef(null);
+            
+            useEffect(() => {
+                const handleClickOutside = (e) => {
+                    if (containerRef.current && !containerRef.current.contains(e.target)) {
+                        setIsOpen(false);
+                    }
+                };
+                document.addEventListener('mousedown', handleClickOutside);
+                return () => document.removeEventListener('mousedown', handleClickOutside);
+            }, []);
+            
+            const filteredOptions = options.filter(opt => 
+                opt.toLowerCase().includes(searchQuery.toLowerCase())
+            );
+            
+            const toggleValue = (value) => {
+                const updated = selectedValues.includes(value)
+                    ? selectedValues.filter(v => v !== value)
+                    : [...selectedValues, value];
+                onChange(updated);
+            };
+            
+            const removeValue = (value, e) => {
+                e.stopPropagation();
+                onChange(selectedValues.filter(v => v !== value));
+            };
+            
+            return (
+                <div className="relative" ref={containerRef}>
+                    {label && <label className="block text-sm font-semibold text-gray-700 mb-1">{label}</label>}
+                    <button
+                        type="button"
+                        onClick={() => setIsOpen(!isOpen)}
+                        className="w-full min-h-[42px] px-3 py-2 border border-gray-200 rounded-lg text-sm text-left bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none flex items-center justify-between gap-2"
+                    >
+                        <div className="flex flex-wrap gap-1.5 flex-1">
+                            {selectedValues.length === 0 ? (
+                                <span className="text-gray-400">{placeholder || 'Select...'}</span>
+                            ) : (
+                                selectedValues.map(val => (
+                                    <span key={val} className="inline-flex items-center gap-1 bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full text-xs font-medium">
+                                        {val}
+                                        <span onClick={(e) => removeValue(val, e)} className="hover:text-indigo-900 cursor-pointer">✕</span>
+                                    </span>
+                                ))
+                            )}
+                        </div>
+                        <span className="text-gray-400 flex-shrink-0">{isOpen ? '▲' : '▼'}</span>
+                    </button>
+                    
+                    {isOpen && (
+                        <div className="absolute z-20 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-64 overflow-hidden flex flex-col">
+                            <div className="p-2 border-b border-gray-100">
+                                <input
+                                    type="text"
+                                    value={searchQuery}
+                                    onChange={e => setSearchQuery(e.target.value)}
+                                    placeholder="Search..."
+                                    autoFocus
+                                    className="w-full px-2 py-1.5 border border-gray-200 rounded text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                                />
+                            </div>
+                            <div className="overflow-y-auto flex-1">
+                                {filteredOptions.length === 0 ? (
+                                    <p className="text-sm text-gray-400 text-center py-3">No matches</p>
+                                ) : (
+                                    filteredOptions.map(opt => {
+                                        const selected = selectedValues.includes(opt);
+                                        return (
+                                            <button
+                                                key={opt}
+                                                type="button"
+                                                onClick={() => toggleValue(opt)}
+                                                className={`w-full flex items-center gap-2 px-3 py-2 text-left text-sm transition ${
+                                                    selected ? 'bg-indigo-50' : 'hover:bg-gray-50'
+                                                }`}
+                                            >
+                                                <input type="checkbox" checked={selected} onChange={() => {}} className="w-4 h-4" />
+                                                {opt}
+                                            </button>
+                                        );
+                                    })
+                                )}
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        }
+        
+        function TemplateEditorModal({ template, journeys, specialtyOptions, onSave, onClose }) {
             const [formData, setFormData] = useState(template);
             const [saving, setSaving] = useState(false);
             
@@ -3419,6 +3516,10 @@
                     alert('Please enter a template name');
                     return;
                 }
+                if (!formData.specialties || formData.specialties.length === 0) {
+                    alert('Please select at least one specialty');
+                    return;
+                }
                 if (formData.items.some(item => !item.title.trim())) {
                     alert('Please give every day a title');
                     return;
@@ -3452,16 +3553,13 @@
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-semibold text-gray-700 mb-1">Position</label>
-                                    <select
-                                        value={formData.position}
-                                        onChange={e => updateField('position', e.target.value)}
-                                        className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none"
-                                    >
-                                        {HEALTHCARE_POSITIONS.map(pos => (
-                                            <option key={pos.value} value={pos.value}>{pos.label}</option>
-                                        ))}
-                                    </select>
+                                    <MultiSelectDropdown
+                                        label="Specialties"
+                                        options={specialtyOptions}
+                                        selectedValues={formData.specialties || []}
+                                        onChange={(values) => updateField('specialties', values)}
+                                        placeholder="Select one or more specialties..."
+                                    />
                                 </div>
                                 <div className="flex items-center gap-3 pt-7">
                                     <label className="flex items-center gap-2 cursor-pointer">
@@ -3761,7 +3859,7 @@
                         employeeEmail: finalEmail.trim(),
                         employeeId: selectedUser?.id || null,
                         department: department.trim(),
-                        position: template.position,
+                        specialties: template.specialties || [],
                         templateId: template.id,
                         templateName: template.name,
                         startDate: startDate,
@@ -3809,7 +3907,7 @@
                             {/* Template Info */}
                             <div className="bg-indigo-50 rounded-lg p-4">
                                 <p className="text-sm text-indigo-700">
-                                    <span className="font-semibold">Template:</span> {template.name} ({template.position}, {template.items.length} days, {template.includeWeekends ? 'all days' : 'Mon-Fri'})
+                                    <span className="font-semibold">Template:</span> {template.name} ({(template.specialties || []).join(', ')}, {template.items.length} days, {template.includeWeekends ? 'all days' : 'Mon-Fri'})
                                 </p>
                             </div>
                             
@@ -4211,7 +4309,7 @@
                                                     <div className="font-medium text-gray-800">{schedule.employeeName}</div>
                                                     {schedule.department && <div className="text-xs text-gray-400">{schedule.department}</div>}
                                                 </td>
-                                                <td className="px-4 py-3 text-sm text-gray-600">{schedule.position}</td>
+                                                <td className="px-4 py-3 text-sm text-gray-600">{(schedule.specialties || []).join(', ')}</td>
                                                 <td className="px-4 py-3 text-sm text-gray-600">{formatDateDisplay(schedule.startDate)}</td>
                                                 <td className="px-4 py-3">
                                                     <div className="flex items-center gap-2">
@@ -4306,7 +4404,7 @@
                         <div className="sticky top-0 bg-white border-b border-gray-100 px-6 py-4 flex justify-between items-center z-10">
                             <div>
                                 <h2 className="text-xl font-bold text-gray-800">{schedule.employeeName}</h2>
-                                <p className="text-sm text-gray-500">{schedule.position} {schedule.department ? `· ${schedule.department}` : ''}</p>
+                                <p className="text-sm text-gray-500">{(schedule.specialties || []).join(', ')} {schedule.department ? `· ${schedule.department}` : ''}</p>
                             </div>
                             <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-2xl">✕</button>
                         </div>
@@ -5956,6 +6054,7 @@
             const [templates, setTemplates] = useState([]);
             const [schedules, setSchedules] = useState([]);
             const [journeys, setJourneys] = useState([]);
+            const [specialtyOptions, setSpecialtyOptions] = useState([]);
             const [loading, setLoading] = useState(true);
             const [filterPosition, setFilterPosition] = useState('all');
             const [editingTemplate, setEditingTemplate] = useState(null); // null = no modal, object = editing/creating
@@ -5969,12 +6068,25 @@
             const loadAll = async () => {
                 setLoading(true);
                 try {
-                    await Promise.all([loadTemplates(), loadSchedules(), loadJourneys()]);
+                    await Promise.all([loadTemplates(), loadSchedules(), loadJourneys(), loadSpecialtyOptions()]);
                 } catch (err) {
                     console.error('Error loading calendar templates data:', err);
                     showToast('Error loading data: ' + err.message, 'error');
                 } finally {
                     setLoading(false);
+                }
+            };
+            
+            const loadSpecialtyOptions = async () => {
+                try {
+                    const { collection, getDocs } = window.firebaseModules;
+                    const snapshot = await getDocs(collection(db, 'specialties'));
+                    const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    const activeNames = data.filter(s => s.isActive !== false).map(s => s.name).sort();
+                    setSpecialtyOptions(activeNames.length > 0 ? activeNames : HEALTHCARE_POSITIONS.map(p => p.value));
+                } catch (err) {
+                    console.error('Error loading specialties:', err);
+                    setSpecialtyOptions(HEALTHCARE_POSITIONS.map(p => p.value));
                 }
             };
             
@@ -6023,7 +6135,7 @@
                 setEditingTemplate({
                     id: null,
                     name: '',
-                    position: 'MOA',
+                    specialties: [],
                     durationDays: 5,
                     includeWeekends: false,
                     description: '',
@@ -6091,7 +6203,7 @@
             
             const filteredTemplates = filterPosition === 'all' 
                 ? templates 
-                : templates.filter(t => t.position === filterPosition);
+                : templates.filter(t => (t.specialties || []).includes(filterPosition));
             
             if (loading) {
                 return (
@@ -6152,15 +6264,15 @@
                                 >
                                     All Positions
                                 </button>
-                                {HEALTHCARE_POSITIONS.map(pos => (
+                                {specialtyOptions.map(name => (
                                     <button
-                                        key={pos.value}
-                                        onClick={() => setFilterPosition(pos.value)}
+                                        key={name}
+                                        onClick={() => setFilterPosition(name)}
                                         className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
-                                            filterPosition === pos.value ? 'bg-indigo-600 text-white' : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
+                                            filterPosition === name ? 'bg-indigo-600 text-white' : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
                                         }`}
                                     >
-                                        {pos.value}
+                                        {name}
                                     </button>
                                 ))}
                             </div>
@@ -6186,9 +6298,13 @@
                                             <div key={template.id} className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 hover:shadow-md transition">
                                                 <div className="flex items-start justify-between mb-3">
                                                     <div>
-                                                        <span className="inline-block px-3 py-1 bg-indigo-100 text-indigo-700 rounded-full text-xs font-semibold mb-2">
-                                                            {template.position}
-                                                        </span>
+                                                        <div className="flex flex-wrap gap-1 mb-2">
+                                                            {(template.specialties || []).map(name => (
+                                                                <span key={name} className="inline-block px-3 py-1 bg-indigo-100 text-indigo-700 rounded-full text-xs font-semibold">
+                                                                    {name}
+                                                                </span>
+                                                            ))}
+                                                        </div>
                                                         <h3 className="text-lg font-bold text-gray-800">{template.name}</h3>
                                                     </div>
                                                 </div>
@@ -6260,6 +6376,7 @@
                         <TemplateEditorModal
                             template={editingTemplate}
                             journeys={journeys}
+                            specialtyOptions={specialtyOptions}
                             onSave={saveTemplate}
                             onClose={() => setEditingTemplate(null)}
                         />

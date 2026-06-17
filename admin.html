@@ -5569,8 +5569,31 @@
         // ============================================
         function RequiredCoursesTab({ courses, assignments, users, specialtyOptions, showToast, onRefresh }) {
             const [showModal, setShowModal] = useState(false);
+            const [searchTarget, setSearchTarget] = useState(''); // searches specialty name or person name
+            const [searchCourse, setSearchCourse] = useState('');
+            const [filterType, setFilterType] = useState('all'); // all | specialty | individual
+            const [visibleCount, setVisibleCount] = useState(20);
             
-            const removeAssignment = async (assignmentId) => {
+            // Remove just one specialty from a position-assignment (deletes the whole doc only if it was the last one)
+            const removeSpecialtyFromAssignment = async (assignment, specialtyName) => {
+                if (!confirm(`Remove "${specialtyName}" from this required course?`)) return;
+                const { doc, deleteDoc, updateDoc } = window.firebaseModules;
+                try {
+                    const remaining = (assignment.specialties || []).filter(s => s !== specialtyName);
+                    if (remaining.length === 0) {
+                        await deleteDoc(doc(db, 'education_assignments', assignment.id));
+                    } else {
+                        await updateDoc(doc(db, 'education_assignments', assignment.id), { specialties: remaining });
+                    }
+                    showToast('🗑️ Removed');
+                    onRefresh();
+                } catch (err) {
+                    console.error('Error removing specialty from assignment:', err);
+                    showToast('Failed to remove: ' + err.message, 'error');
+                }
+            };
+            
+            const removeIndividualAssignment = async (assignmentId) => {
                 if (!confirm('Remove this required course assignment?')) return;
                 const { doc, deleteDoc } = window.firebaseModules;
                 try {
@@ -5583,11 +5606,43 @@
                 }
             };
             
-            const positionAssignments = assignments.filter(a => a.assignType === 'position');
-            const individualAssignments = assignments.filter(a => a.assignType === 'individual');
+            // Flatten assignments into one row per (specialty or person) + course pair
+            const rows = [];
+            assignments.forEach(a => {
+                if (a.assignType === 'position') {
+                    (a.specialties || []).forEach(specialtyName => {
+                        rows.push({
+                            key: `${a.id}_${specialtyName}`,
+                            type: 'specialty',
+                            targetName: specialtyName,
+                            courseName: a.courseName,
+                            recurringAnnual: a.recurringAnnual,
+                            onRemove: () => removeSpecialtyFromAssignment(a, specialtyName)
+                        });
+                    });
+                } else {
+                    rows.push({
+                        key: a.id,
+                        type: 'individual',
+                        targetName: a.userName,
+                        courseName: a.courseName,
+                        recurringAnnual: a.recurringAnnual,
+                        onRemove: () => removeIndividualAssignment(a.id)
+                    });
+                }
+            });
+            
+            const filteredRows = rows.filter(row => {
+                if (filterType !== 'all' && row.type !== filterType) return false;
+                if (searchTarget.trim() && !row.targetName.toLowerCase().includes(searchTarget.trim().toLowerCase())) return false;
+                if (searchCourse.trim() && !row.courseName.toLowerCase().includes(searchCourse.trim().toLowerCase())) return false;
+                return true;
+            });
+            
+            const visibleRows = filteredRows.slice(0, visibleCount);
             
             return (
-                <div className="space-y-6">
+                <div className="space-y-4">
                     <div className="flex justify-end">
                         <button
                             onClick={() => setShowModal(true)}
@@ -5612,73 +5667,95 @@
                         </div>
                     ) : (
                         <>
-                            {/* By Specialty */}
-                            <div>
-                                <h3 className="font-bold text-gray-800 mb-3">By Specialty</h3>
-                                {positionAssignments.length === 0 ? (
-                                    <p className="text-sm text-gray-400">No specialty-wide required courses</p>
-                                ) : (
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                        {specialtyOptions.map(name => {
-                                            const specAssignments = positionAssignments.filter(a => (a.specialties || []).includes(name));
-                                            if (specAssignments.length === 0) return null;
-                                            return (
-                                                <div key={name} className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
-                                                    <div className="font-semibold text-gray-700 mb-2">{name}</div>
-                                                    <div className="space-y-1">
-                                                        {specAssignments.map(a => (
-                                                            <div key={a.id} className="flex items-center justify-between text-sm">
-                                                                <span className="text-gray-600 flex items-center gap-1">
-                                                                    {a.recurringAnnual && <Icons.RefreshCw className="w-3 h-3 text-purple-500" />}
-                                                                    {a.courseName}
-                                                                    {a.specialties && a.specialties.length > 1 && (
-                                                                        <span className="text-xs text-gray-400">(+{a.specialties.length - 1} more)</span>
-                                                                    )}
-                                                                </span>
-                                                                <button onClick={() => removeAssignment(a.id)} className="text-red-400 hover:text-red-600 text-xs">✕</button>
-                                                            </div>
-                                                        ))}
-                                                    </div>
-                                                </div>
-                                            );
-                                        })}
-                                    </div>
-                                )}
+                            {/* Filters */}
+                            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 flex flex-wrap gap-3 items-center">
+                                <input
+                                    type="text"
+                                    value={searchTarget}
+                                    onChange={e => { setSearchTarget(e.target.value); setVisibleCount(20); }}
+                                    placeholder="Search specialty or person name..."
+                                    className="flex-1 min-w-[200px] px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                                />
+                                <input
+                                    type="text"
+                                    value={searchCourse}
+                                    onChange={e => { setSearchCourse(e.target.value); setVisibleCount(20); }}
+                                    placeholder="Search course name..."
+                                    className="flex-1 min-w-[200px] px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                                />
+                                <div className="flex gap-2">
+                                    {['all', 'specialty', 'individual'].map(t => (
+                                        <button
+                                            key={t}
+                                            onClick={() => { setFilterType(t); setVisibleCount(20); }}
+                                            className={`px-3 py-2 rounded-lg text-sm font-medium transition ${
+                                                filterType === t ? 'bg-indigo-600 text-white' : 'bg-gray-50 text-gray-600 hover:bg-gray-100'
+                                            }`}
+                                        >
+                                            {t === 'all' ? 'All' : t === 'specialty' ? 'By Specialty' : 'By Individual'}
+                                        </button>
+                                    ))}
+                                </div>
                             </div>
                             
-                            {/* By Individual */}
-                            <div>
-                                <h3 className="font-bold text-gray-800 mb-3">By Individual</h3>
-                                {individualAssignments.length === 0 ? (
-                                    <p className="text-sm text-gray-400">No individually-required courses</p>
-                                ) : (
-                                    <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-                                        <table className="w-full">
-                                            <thead className="bg-gray-50 border-b border-gray-100">
-                                                <tr>
-                                                    <th className="text-left px-4 py-2 text-sm font-semibold text-gray-600">Staff Member</th>
-                                                    <th className="text-left px-4 py-2 text-sm font-semibold text-gray-600">Course</th>
-                                                    <th className="text-left px-4 py-2 text-sm font-semibold text-gray-600"></th>
+                            {/* Unified Table */}
+                            <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                                <table className="w-full">
+                                    <thead className="bg-gray-50 border-b border-gray-100">
+                                        <tr>
+                                            <th className="text-left px-4 py-2 text-sm font-semibold text-gray-600">Type</th>
+                                            <th className="text-left px-4 py-2 text-sm font-semibold text-gray-600">Specialty / Person</th>
+                                            <th className="text-left px-4 py-2 text-sm font-semibold text-gray-600">Course</th>
+                                            <th className="text-left px-4 py-2 text-sm font-semibold text-gray-600"></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {visibleRows.length === 0 ? (
+                                            <tr>
+                                                <td colSpan="4" className="px-4 py-8 text-center text-sm text-gray-400">No matches found</td>
+                                            </tr>
+                                        ) : (
+                                            visibleRows.map(row => (
+                                                <tr key={row.key} className="border-b border-gray-50 last:border-b-0 hover:bg-gray-50">
+                                                    <td className="px-4 py-2.5">
+                                                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                                                            row.type === 'specialty' ? 'bg-indigo-100 text-indigo-700' : 'bg-purple-100 text-purple-700'
+                                                        }`}>
+                                                            {row.type === 'specialty' ? '👥 Specialty' : '👤 Individual'}
+                                                        </span>
+                                                    </td>
+                                                    <td className="px-4 py-2.5 text-sm text-gray-800 font-medium">{row.targetName}</td>
+                                                    <td className="px-4 py-2.5 text-sm text-gray-600 flex items-center gap-1">
+                                                        {row.recurringAnnual && <Icons.RefreshCw className="w-3 h-3 text-purple-500" title="Annual" />}
+                                                        {row.courseName}
+                                                    </td>
+                                                    <td className="px-4 py-2.5 text-right">
+                                                        <button onClick={row.onRemove} className="text-red-400 hover:text-red-600 text-xs font-medium">
+                                                            ✕ Remove
+                                                        </button>
+                                                    </td>
                                                 </tr>
-                                            </thead>
-                                            <tbody>
-                                                {individualAssignments.map(a => (
-                                                    <tr key={a.id} className="border-b border-gray-50 last:border-b-0">
-                                                        <td className="px-4 py-2 text-sm text-gray-800">{a.userName}</td>
-                                                        <td className="px-4 py-2 text-sm text-gray-600 flex items-center gap-1">
-                                                            {a.recurringAnnual && <Icons.RefreshCw className="w-3 h-3 text-purple-500" />}
-                                                            {a.courseName}
-                                                        </td>
-                                                        <td className="px-4 py-2 text-right">
-                                                            <button onClick={() => removeAssignment(a.id)} className="text-red-400 hover:text-red-600 text-xs">✕ Remove</button>
-                                                        </td>
-                                                    </tr>
-                                                ))}
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                )}
+                                            ))
+                                        )}
+                                    </tbody>
+                                </table>
                             </div>
+                            
+                            {filteredRows.length > visibleCount && (
+                                <div className="text-center">
+                                    <button
+                                        onClick={() => setVisibleCount(c => c + 20)}
+                                        className="px-5 py-2 bg-white border border-gray-200 text-gray-600 rounded-lg hover:bg-gray-50 transition text-sm font-medium"
+                                    >
+                                        Load more ({filteredRows.length - visibleCount} remaining)
+                                    </button>
+                                </div>
+                            )}
+                            
+                            <p className="text-xs text-gray-400 text-center">
+                                Showing {visibleRows.length} of {filteredRows.length} requirement{filteredRows.length !== 1 ? 's' : ''}
+                                {filteredRows.length !== rows.length ? ` (filtered from ${rows.length} total)` : ''}
+                            </p>
                         </>
                     )}
                     
@@ -5892,8 +5969,9 @@
         // STAFF PROGRESS TAB (Manager View)
         // ============================================
         function StaffProgressTab({ courses, users, assignments, progress, specialtyOptions, showToast, onRefresh }) {
-            const [selectedUserId, setSelectedUserId] = useState('all');
+            const [searchStaff, setSearchStaff] = useState('');
             const [filterStatus, setFilterStatus] = useState('all');
+            const [visibleCount, setVisibleCount] = useState(20);
             
             // Build the effective "required course" list per user
             const getRequiredCoursesForUser = (user) => {
@@ -5938,10 +6016,15 @@
             });
             
             const filteredRows = allRows.filter(row => {
-                if (selectedUserId !== 'all' && row.user.id !== selectedUserId) return false;
+                if (searchStaff.trim()) {
+                    const name = (row.user.displayName || row.user.email || '').toLowerCase();
+                    if (!name.includes(searchStaff.trim().toLowerCase())) return false;
+                }
                 if (filterStatus !== 'all' && row.status !== filterStatus) return false;
                 return true;
             });
+            
+            const visibleRows = filteredRows.slice(0, visibleCount);
             
             const summary = {
                 total: allRows.length,
@@ -6011,22 +6094,19 @@
                     
                     {/* Filters */}
                     <div className="flex gap-3 mb-4 flex-wrap">
-                        <select
-                            value={selectedUserId}
-                            onChange={e => setSelectedUserId(e.target.value)}
-                            className="px-4 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
-                        >
-                            <option value="all">All Staff</option>
-                            {studentUsers.map(u => (
-                                <option key={u.id} value={u.id}>{u.displayName || u.email}</option>
-                            ))}
-                        </select>
+                        <input
+                            type="text"
+                            value={searchStaff}
+                            onChange={e => { setSearchStaff(e.target.value); setVisibleCount(20); }}
+                            placeholder="Search staff by name..."
+                            className="flex-1 min-w-[220px] px-4 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                        />
                         
                         <div className="flex gap-2">
                             {['all', 'completed', 'in_progress', 'not_started', 'overdue'].map(s => (
                                 <button
                                     key={s}
-                                    onClick={() => setFilterStatus(s)}
+                                    onClick={() => { setFilterStatus(s); setVisibleCount(20); }}
                                     className={`px-3 py-2 rounded-lg text-sm font-medium transition ${
                                         filterStatus === s ? 'bg-indigo-600 text-white' : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
                                     }`}
@@ -6050,7 +6130,12 @@
                                 </tr>
                             </thead>
                             <tbody>
-                                {filteredRows.map((row, i) => {
+                                {visibleRows.length === 0 ? (
+                                    <tr>
+                                        <td colSpan="5" className="px-4 py-8 text-center text-sm text-gray-400">No matches found</td>
+                                    </tr>
+                                ) : (
+                                    visibleRows.map((row, i) => {
                                     const statusInfo = EDUCATION_STATUS[row.status];
                                     return (
                                         <tr key={i} className="border-b border-gray-50 hover:bg-gray-50">
@@ -6085,10 +6170,27 @@
                                             </td>
                                         </tr>
                                     );
-                                })}
+                                    })
+                                )}
                             </tbody>
                         </table>
                     </div>
+                    
+                    {filteredRows.length > visibleCount && (
+                        <div className="text-center mt-4">
+                            <button
+                                onClick={() => setVisibleCount(c => c + 20)}
+                                className="px-5 py-2 bg-white border border-gray-200 text-gray-600 rounded-lg hover:bg-gray-50 transition text-sm font-medium"
+                            >
+                                Load more ({filteredRows.length - visibleCount} remaining)
+                            </button>
+                        </div>
+                    )}
+                    
+                    <p className="text-xs text-gray-400 text-center mt-3">
+                        Showing {visibleRows.length} of {filteredRows.length} record{filteredRows.length !== 1 ? 's' : ''}
+                        {filteredRows.length !== allRows.length ? ` (filtered from ${allRows.length} total)` : ''}
+                    </p>
                 </div>
             );
         }

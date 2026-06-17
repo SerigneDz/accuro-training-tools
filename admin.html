@@ -4752,6 +4752,352 @@
         }
         
         // ============================================
+        // SPECIALTIES MANAGEMENT (admin-managed role/specialty list)
+        // ============================================
+        const DEFAULT_SPECIALTIES = [
+            'MOA', 'Nurse', 'LPN', 'FrontDesk', 'Admin', 'Manager',
+            'BHC', 'Social Work', 'CHN', 'Dietitian', 'ES', 'Health Informatics',
+            'Medical Home', 'CDM Nurse', 'RIC LPN', 'SCH', 'Pharmacy', 'Specialist Nav'
+        ];
+        
+        function SpecialtiesManagement({ showToast }) {
+            const [specialties, setSpecialties] = useState([]);
+            const [loading, setLoading] = useState(true);
+            const [newSpecialtyName, setNewSpecialtyName] = useState('');
+            const [editingId, setEditingId] = useState(null);
+            const [editingName, setEditingName] = useState('');
+            const [migrating, setMigrating] = useState(false);
+            const [migrationLog, setMigrationLog] = useState([]);
+            const [showMigration, setShowMigration] = useState(false);
+            
+            useEffect(() => {
+                loadSpecialties();
+            }, []);
+            
+            const loadSpecialties = async () => {
+                setLoading(true);
+                try {
+                    const { collection, getDocs } = window.firebaseModules;
+                    const snapshot = await getDocs(collection(db, 'specialties'));
+                    const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    data.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+                    setSpecialties(data);
+                } catch (err) {
+                    console.error('Error loading specialties:', err);
+                    setSpecialties([]);
+                } finally {
+                    setLoading(false);
+                }
+            };
+            
+            const seedDefaults = async () => {
+                const { doc, setDoc, serverTimestamp } = window.firebaseModules;
+                try {
+                    for (const name of DEFAULT_SPECIALTIES) {
+                        const id = `specialty_${name.toLowerCase().replace(/[^a-z0-9]+/g, '_')}`;
+                        await setDoc(doc(db, 'specialties', id), {
+                            name,
+                            isActive: true,
+                            createdAt: serverTimestamp()
+                        }, { merge: true });
+                    }
+                    showToast(`✅ Seeded ${DEFAULT_SPECIALTIES.length} default specialties!`);
+                    loadSpecialties();
+                } catch (err) {
+                    console.error('Error seeding specialties:', err);
+                    showToast('Failed to seed specialties: ' + err.message, 'error');
+                }
+            };
+            
+            const addSpecialty = async () => {
+                const name = newSpecialtyName.trim();
+                if (!name) return;
+                if (specialties.some(s => s.name.toLowerCase() === name.toLowerCase())) {
+                    showToast('That specialty already exists', 'error');
+                    return;
+                }
+                const { doc, setDoc, serverTimestamp } = window.firebaseModules;
+                try {
+                    const id = `specialty_${name.toLowerCase().replace(/[^a-z0-9]+/g, '_')}_${Date.now()}`;
+                    await setDoc(doc(db, 'specialties', id), {
+                        name,
+                        isActive: true,
+                        createdAt: serverTimestamp()
+                    });
+                    setNewSpecialtyName('');
+                    showToast(`✅ Added "${name}"`);
+                    loadSpecialties();
+                } catch (err) {
+                    console.error('Error adding specialty:', err);
+                    showToast('Failed to add specialty: ' + err.message, 'error');
+                }
+            };
+            
+            const saveEdit = async (id) => {
+                const name = editingName.trim();
+                if (!name) return;
+                const { doc, updateDoc } = window.firebaseModules;
+                try {
+                    await updateDoc(doc(db, 'specialties', id), { name });
+                    setEditingId(null);
+                    showToast('✅ Specialty updated');
+                    loadSpecialties();
+                } catch (err) {
+                    console.error('Error updating specialty:', err);
+                    showToast('Failed to update specialty: ' + err.message, 'error');
+                }
+            };
+            
+            const toggleActive = async (specialty) => {
+                const { doc, updateDoc } = window.firebaseModules;
+                try {
+                    await updateDoc(doc(db, 'specialties', specialty.id), { isActive: !specialty.isActive });
+                    loadSpecialties();
+                } catch (err) {
+                    console.error('Error toggling specialty:', err);
+                    showToast('Failed to update specialty', 'error');
+                }
+            };
+            
+            const deleteSpecialty = async (id) => {
+                if (!confirm('Delete this specialty? Existing assignments referencing it will keep the old name as plain text but it will no longer appear in selection lists.')) return;
+                const { doc, deleteDoc } = window.firebaseModules;
+                try {
+                    await deleteDoc(doc(db, 'specialties', id));
+                    showToast('🗑️ Specialty deleted');
+                    loadSpecialties();
+                } catch (err) {
+                    console.error('Error deleting specialty:', err);
+                    showToast('Failed to delete specialty', 'error');
+                }
+            };
+            
+            // ============================================
+            // ONE-TIME MIGRATION: single specialty/position string -> specialties array
+            // Idempotent - safe to run multiple times, skips already-migrated docs
+            // ============================================
+            const runMigration = async () => {
+                if (!confirm('Run migration? This will add a new "specialties" array field to Users, Calendar Templates, Schedules, and Continuing Education assignments based on their existing single value. Existing fields are kept (not deleted) for safety.')) return;
+                
+                setMigrating(true);
+                const log = [];
+                const { collection, getDocs, doc, updateDoc } = window.firebaseModules;
+                
+                // Helper: find the canonical specialty name (case-insensitive match against our list),
+                // falling back to the raw stored value if no match found (so nothing gets silently dropped)
+                const resolveSpecialtyName = (rawValue) => {
+                    if (!rawValue) return null;
+                    const match = specialties.find(s => s.name.toLowerCase() === rawValue.toLowerCase());
+                    return match ? match.name : rawValue;
+                };
+                
+                try {
+                    // 1. Users: specialty (string) -> specialties (array)
+                    const usersSnap = await getDocs(collection(db, 'users'));
+                    let usersMigrated = 0;
+                    for (const userDoc of usersSnap.docs) {
+                        const data = userDoc.data();
+                        if (data.specialties && Array.isArray(data.specialties)) continue; // already migrated
+                        if (!data.specialty) continue; // nothing to migrate
+                        const resolved = resolveSpecialtyName(data.specialty);
+                        await updateDoc(doc(db, 'users', userDoc.id), { specialties: [resolved] });
+                        usersMigrated++;
+                    }
+                    log.push(`✅ Users: migrated ${usersMigrated} of ${usersSnap.size}`);
+                    
+                    // 2. Calendar Templates: position (string) -> specialties (array)
+                    const templatesSnap = await getDocs(collection(db, 'healthcare_templates'));
+                    let templatesMigrated = 0;
+                    for (const tDoc of templatesSnap.docs) {
+                        const data = tDoc.data();
+                        if (data.specialties && Array.isArray(data.specialties)) continue;
+                        if (!data.position) continue;
+                        const resolved = resolveSpecialtyName(data.position);
+                        await updateDoc(doc(db, 'healthcare_templates', tDoc.id), { specialties: [resolved] });
+                        templatesMigrated++;
+                    }
+                    log.push(`✅ Calendar Templates: migrated ${templatesMigrated} of ${templatesSnap.size}`);
+                    
+                    // 3. Healthcare Schedules: position (string) -> specialties (array)
+                    const schedulesSnap = await getDocs(collection(db, 'healthcare_schedules'));
+                    let schedulesMigrated = 0;
+                    for (const sDoc of schedulesSnap.docs) {
+                        const data = sDoc.data();
+                        if (data.specialties && Array.isArray(data.specialties)) continue;
+                        if (!data.position) continue;
+                        const resolved = resolveSpecialtyName(data.position);
+                        await updateDoc(doc(db, 'healthcare_schedules', sDoc.id), { specialties: [resolved] });
+                        schedulesMigrated++;
+                    }
+                    log.push(`✅ Schedules: migrated ${schedulesMigrated} of ${schedulesSnap.size}`);
+                    
+                    // 4. Education Assignments: position (string, assignType='position') -> specialties (array)
+                    const assignSnap = await getDocs(collection(db, 'education_assignments'));
+                    let assignMigrated = 0;
+                    for (const aDoc of assignSnap.docs) {
+                        const data = aDoc.data();
+                        if (data.specialties && Array.isArray(data.specialties)) continue;
+                        if (data.assignType !== 'position' || !data.position) continue;
+                        const resolved = resolveSpecialtyName(data.position);
+                        await updateDoc(doc(db, 'education_assignments', aDoc.id), { specialties: [resolved] });
+                        assignMigrated++;
+                    }
+                    log.push(`✅ Continuing Education Assignments: migrated ${assignMigrated} of ${assignSnap.size}`);
+                    
+                    log.push('🎉 Migration complete!');
+                    showToast('✅ Migration complete!');
+                } catch (err) {
+                    console.error('Migration error:', err);
+                    log.push(`❌ Error: ${err.message}`);
+                    showToast('Migration encountered an error - see log', 'error');
+                } finally {
+                    setMigrationLog(log);
+                    setMigrating(false);
+                }
+            };
+            
+            if (loading) {
+                return (
+                    <div className="p-8 flex items-center justify-center min-h-screen">
+                        <div className="text-center">
+                            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto mb-4"></div>
+                            <p className="text-gray-600">Loading specialties...</p>
+                        </div>
+                    </div>
+                );
+            }
+            
+            return (
+                <div className="p-8 max-w-3xl">
+                    <div className="flex justify-between items-center mb-6">
+                        <div>
+                            <h1 className="text-3xl font-bold text-gray-800">🏷️ Specialties</h1>
+                            <p className="text-gray-500 mt-1">Manage the list of roles/specialties used across Users, Calendar Templates, and Continuing Education</p>
+                        </div>
+                        <button
+                            onClick={() => setShowMigration(!showMigration)}
+                            className="px-4 py-2 bg-amber-50 text-amber-700 border border-amber-200 rounded-lg hover:bg-amber-100 transition text-sm font-medium"
+                        >
+                            ⚙️ Migration Tool
+                        </button>
+                    </div>
+                    
+                    {showMigration && (
+                        <div className="bg-amber-50 border border-amber-200 rounded-xl p-5 mb-6">
+                            <h3 className="font-bold text-amber-800 mb-2">One-Time Data Migration</h3>
+                            <p className="text-sm text-amber-700 mb-3">
+                                Converts existing single specialty/position values (Users, Calendar Templates, Schedules, Continuing Education) 
+                                into the new multi-select "specialties" array format. Safe to run multiple times — already-migrated 
+                                records are skipped automatically. Old fields are preserved, nothing is deleted.
+                            </p>
+                            <p className="text-sm text-amber-700 mb-3 font-medium">
+                                Run this only after seeding/reviewing your specialty list below, so names match correctly.
+                            </p>
+                            <button
+                                onClick={runMigration}
+                                disabled={migrating}
+                                className="px-5 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition font-semibold disabled:opacity-50"
+                            >
+                                {migrating ? 'Running migration...' : 'Run Migration Now'}
+                            </button>
+                            
+                            {migrationLog.length > 0 && (
+                                <div className="mt-4 bg-white rounded-lg p-3 text-sm font-mono space-y-1">
+                                    {migrationLog.map((line, i) => <div key={i}>{line}</div>)}
+                                </div>
+                            )}
+                        </div>
+                    )}
+                    
+                    {specialties.length === 0 ? (
+                        <div className="bg-white rounded-xl shadow-sm p-12 text-center">
+                            <div className="text-5xl mb-4">🏷️</div>
+                            <h3 className="text-lg font-semibold text-gray-700 mb-2">No specialties defined yet</h3>
+                            <p className="text-gray-500 mb-4">Start with the default healthcare specialty list, or add your own</p>
+                            <button
+                                onClick={seedDefaults}
+                                className="px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition font-semibold"
+                            >
+                                Seed Default Specialties ({DEFAULT_SPECIALTIES.length})
+                            </button>
+                        </div>
+                    ) : (
+                        <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                            <div className="divide-y divide-gray-50">
+                                {specialties.map(specialty => (
+                                    <div key={specialty.id} className="flex items-center justify-between px-5 py-3">
+                                        {editingId === specialty.id ? (
+                                            <input
+                                                type="text"
+                                                value={editingName}
+                                                onChange={e => setEditingName(e.target.value)}
+                                                onKeyDown={e => e.key === 'Enter' && saveEdit(specialty.id)}
+                                                autoFocus
+                                                className="flex-1 px-3 py-1.5 border border-indigo-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none mr-3"
+                                            />
+                                        ) : (
+                                            <span className={`text-sm font-medium ${specialty.isActive ? 'text-gray-800' : 'text-gray-400 line-through'}`}>
+                                                {specialty.name}
+                                            </span>
+                                        )}
+                                        <div className="flex gap-2">
+                                            {editingId === specialty.id ? (
+                                                <button onClick={() => saveEdit(specialty.id)} className="text-green-600 hover:text-green-800 text-sm font-medium">
+                                                    Save
+                                                </button>
+                                            ) : (
+                                                <>
+                                                    <button
+                                                        onClick={() => toggleActive(specialty)}
+                                                        className="text-xs px-2 py-1 rounded-full font-medium transition"
+                                                        style={{
+                                                            backgroundColor: specialty.isActive ? '#dcfce7' : '#f3f4f6',
+                                                            color: specialty.isActive ? '#15803d' : '#6b7280'
+                                                        }}
+                                                    >
+                                                        {specialty.isActive ? 'Active' : 'Inactive'}
+                                                    </button>
+                                                    <button
+                                                        onClick={() => { setEditingId(specialty.id); setEditingName(specialty.name); }}
+                                                        className="text-gray-400 hover:text-gray-600"
+                                                    >
+                                                        <Icons.Edit className="w-4 h-4" />
+                                                    </button>
+                                                    <button
+                                                        onClick={() => deleteSpecialty(specialty.id)}
+                                                        className="text-red-400 hover:text-red-600"
+                                                    >
+                                                        <Icons.Trash className="w-4 h-4" />
+                                                    </button>
+                                                </>
+                                            )}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                            <div className="px-5 py-3 bg-gray-50 flex gap-2">
+                                <input
+                                    type="text"
+                                    value={newSpecialtyName}
+                                    onChange={e => setNewSpecialtyName(e.target.value)}
+                                    onKeyDown={e => e.key === 'Enter' && addSpecialty()}
+                                    placeholder="Add a new specialty..."
+                                    className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                                />
+                                <button
+                                    onClick={addSpecialty}
+                                    className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition text-sm font-semibold"
+                                >
+                                    + Add
+                                </button>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        }
+        
+        // ============================================
         // CONTINUING EDUCATION - MAIN COMPONENT
         // ============================================
         function ContinuingEducation({ showToast }) {
@@ -6409,6 +6755,16 @@
                             </button>
                             
                             <button
+                                onClick={() => setCurrentView('specialties')}
+                                className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition ${
+                                    currentView === 'specialties' ? 'bg-white bg-opacity-20' : 'hover:bg-white hover:bg-opacity-10'
+                                }`}
+                            >
+                                <Icons.BookOpen className="w-5 h-5" />
+                                Specialties
+                            </button>
+                            
+                            <button
                                 onClick={() => setCurrentView('quizgames')}
                                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition ${
                                     currentView === 'quizgames' ? 'bg-white bg-opacity-20' : 'hover:bg-white hover:bg-opacity-10'
@@ -6494,6 +6850,7 @@
                         {currentView === 'dashboard' && <Dashboard stats={stats} setCurrentView={setCurrentView} />}
                         {currentView === 'journeys' && <JourneyManagement showToast={showToast} />}
                         {currentView === 'users' && <UserManagement showToast={showToast} />}
+                        {currentView === 'specialties' && <SpecialtiesManagement showToast={showToast} />}
                         {currentView === 'quizgames' && <QuizGames showToast={showToast} />}
                         {currentView === 'calendartemplates' && <CalendarTemplates showToast={showToast} />}
                         {currentView === 'continuingeducation' && <ContinuingEducation showToast={showToast} />}

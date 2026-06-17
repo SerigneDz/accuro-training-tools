@@ -3028,7 +3028,573 @@
         // ============================================
         // QUIZ GAMES (MVP)
         // ============================================
+        // ============================================
+        // QUESTION BANK (Quiz Games question management)
+        // ============================================
+        const SAMPLE_SEED_QUESTIONS = [
+            {
+                question: "What are the TWO pieces of ID required for patient check-in?",
+                options: ["Health card + Driver's license", "Health card + Birth certificate", "Passport + Health card", "Any two government IDs"],
+                correctAnswer: 0,
+                category: 'Patient Intake'
+            },
+            {
+                question: "What is the first step when a patient arrives?",
+                options: ["Take vital signs", "Verify identity", "Collect payment", "Update medical history"],
+                correctAnswer: 1,
+                category: 'Patient Intake'
+            },
+            {
+                question: "Where do you find patient appointment history in Accuro?",
+                options: ["Dashboard → History", "Patient Chart → Encounters", "Reports → Appointments", "Tools → Search"],
+                correctAnswer: 1,
+                category: 'EMR Navigation'
+            },
+            {
+                question: "What should you do if a patient forgets their health card?",
+                options: ["Refuse service", "Ask for alternate ID and make a note", "Bill them directly", "Call their doctor"],
+                correctAnswer: 1,
+                category: 'Patient Intake'
+            },
+            {
+                question: "How do you book a follow-up appointment in Accuro?",
+                options: ["File → New Appointment", "Right-click patient → Book", "Calendar → Add Appointment", "Schedule → New"],
+                correctAnswer: 2,
+                category: 'EMR Navigation'
+            }
+        ];
+        
+        function QuestionBank({ showToast }) {
+            const [questions, setQuestions] = useState([]);
+            const [journeys, setJourneys] = useState([]);
+            const [loading, setLoading] = useState(true);
+            const [editingQuestion, setEditingQuestion] = useState(null);
+            const [showGenerateModal, setShowGenerateModal] = useState(false);
+            const [searchQuery, setSearchQuery] = useState('');
+            const [filterCategory, setFilterCategory] = useState('all');
+            
+            useEffect(() => {
+                loadAll();
+            }, []);
+            
+            const loadAll = async () => {
+                setLoading(true);
+                await Promise.all([loadQuestions(), loadJourneys()]);
+                setLoading(false);
+            };
+            
+            const loadQuestions = async () => {
+                try {
+                    const { collection, getDocs } = window.firebaseModules;
+                    const snapshot = await getDocs(collection(db, 'quiz_questions'));
+                    setQuestions(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
+                } catch (err) {
+                    console.error('Error loading questions:', err);
+                    setQuestions([]);
+                }
+            };
+            
+            const loadJourneys = async () => {
+                try {
+                    const { collection, getDocs } = window.firebaseModules;
+                    const snapshot = await getDocs(collection(db, 'journeys'));
+                    setJourneys(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
+                } catch (err) {
+                    console.error('Error loading journeys:', err);
+                    setJourneys([]);
+                }
+            };
+            
+            const createNewQuestion = () => {
+                setEditingQuestion({
+                    id: null,
+                    question: '',
+                    options: ['', '', '', ''],
+                    correctAnswer: 0,
+                    category: '',
+                    isActive: true
+                });
+            };
+            
+            const saveQuestion = async (data) => {
+                const { doc, setDoc, serverTimestamp } = window.firebaseModules;
+                try {
+                    const id = data.id || `question_${Date.now()}`;
+                    const toSave = { ...data };
+                    delete toSave.id;
+                    toSave.updatedAt = serverTimestamp();
+                    if (!data.id) toSave.createdAt = serverTimestamp();
+                    await setDoc(doc(db, 'quiz_questions', id), toSave, { merge: true });
+                    showToast(data.id ? '✅ Question updated!' : '✅ Question added!');
+                    setEditingQuestion(null);
+                    loadQuestions();
+                } catch (err) {
+                    console.error('Error saving question:', err);
+                    showToast('Failed to save question: ' + err.message, 'error');
+                }
+            };
+            
+            const deleteQuestion = async (id) => {
+                if (!confirm('Delete this question? This cannot be undone.')) return;
+                const { doc, deleteDoc } = window.firebaseModules;
+                try {
+                    await deleteDoc(doc(db, 'quiz_questions', id));
+                    showToast('🗑️ Question deleted');
+                    loadQuestions();
+                } catch (err) {
+                    console.error('Error deleting question:', err);
+                    showToast('Failed to delete question', 'error');
+                }
+            };
+            
+            const seedSampleQuestions = async () => {
+                const { doc, setDoc, serverTimestamp } = window.firebaseModules;
+                try {
+                    for (const q of SAMPLE_SEED_QUESTIONS) {
+                        const id = `question_seed_${q.question.toLowerCase().replace(/[^a-z0-9]+/g, '_').slice(0, 40)}`;
+                        await setDoc(doc(db, 'quiz_questions', id), {
+                            ...q,
+                            isActive: true,
+                            createdAt: serverTimestamp(),
+                            updatedAt: serverTimestamp()
+                        }, { merge: true });
+                    }
+                    showToast(`✅ Seeded ${SAMPLE_SEED_QUESTIONS.length} sample questions!`);
+                    loadQuestions();
+                } catch (err) {
+                    console.error('Error seeding questions:', err);
+                    showToast('Failed to seed questions: ' + err.message, 'error');
+                }
+            };
+            
+            const categories = ['all', ...new Set(questions.map(q => q.category).filter(Boolean))];
+            
+            const filteredQuestions = questions.filter(q => {
+                if (filterCategory !== 'all' && q.category !== filterCategory) return false;
+                if (searchQuery.trim() && !q.question.toLowerCase().includes(searchQuery.trim().toLowerCase())) return false;
+                return true;
+            });
+            
+            if (loading) {
+                return (
+                    <div className="p-8 flex items-center justify-center min-h-screen">
+                        <div className="text-center">
+                            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto mb-4"></div>
+                            <p className="text-gray-600">Loading question bank...</p>
+                        </div>
+                    </div>
+                );
+            }
+            
+            return (
+                <div>
+                    <div className="flex justify-between items-center mb-6 flex-wrap gap-3">
+                        <div>
+                            <h2 className="text-xl font-bold text-gray-800">📝 Question Bank</h2>
+                            <p className="text-gray-500 text-sm mt-1">{questions.length} question{questions.length !== 1 ? 's' : ''} available for quiz games</p>
+                        </div>
+                        <div className="flex gap-2">
+                            <button
+                                onClick={() => setShowGenerateModal(true)}
+                                className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 transition text-sm font-medium"
+                            >
+                                <Icons.RefreshCw className="w-4 h-4" />
+                                Generate from Journey
+                            </button>
+                            <button
+                                onClick={createNewQuestion}
+                                className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-600 text-white rounded-lg hover:from-purple-600 hover:to-pink-700 transition text-sm font-semibold"
+                            >
+                                <Icons.Plus className="w-4 h-4" />
+                                Add Question
+                            </button>
+                        </div>
+                    </div>
+                    
+                    {questions.length === 0 ? (
+                        <div className="bg-white rounded-xl shadow-sm p-12 text-center">
+                            <div className="text-5xl mb-4">📝</div>
+                            <h3 className="text-lg font-semibold text-gray-700 mb-2">No questions yet</h3>
+                            <p className="text-gray-500 mb-4">Start with sample questions, generate from a journey, or write your own</p>
+                            <div className="flex gap-3 justify-center">
+                                <button
+                                    onClick={seedSampleQuestions}
+                                    className="px-5 py-2.5 bg-white border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 transition font-medium"
+                                >
+                                    Seed {SAMPLE_SEED_QUESTIONS.length} Sample Questions
+                                </button>
+                                <button
+                                    onClick={createNewQuestion}
+                                    className="px-5 py-2.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition font-semibold"
+                                >
+                                    Add Question
+                                </button>
+                            </div>
+                        </div>
+                    ) : (
+                        <>
+                            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 mb-4 flex flex-wrap gap-3">
+                                <input
+                                    type="text"
+                                    value={searchQuery}
+                                    onChange={e => setSearchQuery(e.target.value)}
+                                    placeholder="Search questions..."
+                                    className="flex-1 min-w-[200px] px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                                />
+                                <select
+                                    value={filterCategory}
+                                    onChange={e => setFilterCategory(e.target.value)}
+                                    className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                                >
+                                    {categories.map(c => (
+                                        <option key={c} value={c}>{c === 'all' ? 'All Categories' : c}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            
+                            <div className="space-y-2">
+                                {filteredQuestions.length === 0 ? (
+                                    <p className="text-center text-gray-400 py-8">No questions match your search</p>
+                                ) : (
+                                    filteredQuestions.map(q => (
+                                        <div key={q.id} className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 flex items-start justify-between gap-4">
+                                            <div className="flex-1">
+                                                <div className="flex items-center gap-2 mb-1">
+                                                    {q.category && (
+                                                        <span className="text-xs bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full">{q.category}</span>
+                                                    )}
+                                                    {q.sourceJourneyId && (
+                                                        <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full flex items-center gap-1">
+                                                            <Icons.Journey className="w-3 h-3" /> From journey
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                <p className="font-medium text-gray-800">{q.question}</p>
+                                                <div className="mt-2 grid grid-cols-2 gap-1">
+                                                    {q.options.map((opt, i) => (
+                                                        <div key={i} className={`text-xs px-2 py-1 rounded ${
+                                                            i === q.correctAnswer ? 'bg-green-50 text-green-700 font-medium' : 'text-gray-500'
+                                                        }`}>
+                                                            {i === q.correctAnswer ? '✓ ' : ''}{opt}
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                            <div className="flex gap-2 flex-shrink-0">
+                                                <button
+                                                    onClick={() => setEditingQuestion(JSON.parse(JSON.stringify(q)))}
+                                                    className="px-3 py-1.5 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition"
+                                                >
+                                                    <Icons.Edit className="w-4 h-4" />
+                                                </button>
+                                                <button
+                                                    onClick={() => deleteQuestion(q.id)}
+                                                    className="px-3 py-1.5 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition"
+                                                >
+                                                    <Icons.Trash className="w-4 h-4" />
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ))
+                                )}
+                            </div>
+                        </>
+                    )}
+                    
+                    {editingQuestion && (
+                        <QuestionEditorModal
+                            question={editingQuestion}
+                            onSave={saveQuestion}
+                            onClose={() => setEditingQuestion(null)}
+                        />
+                    )}
+                    
+                    {showGenerateModal && (
+                        <GenerateFromJourneyModal
+                            journeys={journeys}
+                            onClose={() => setShowGenerateModal(false)}
+                            onSaved={() => { setShowGenerateModal(false); loadQuestions(); }}
+                            showToast={showToast}
+                        />
+                    )}
+                </div>
+            );
+        }
+        
+        // ============================================
+        // QUESTION EDITOR MODAL
+        // ============================================
+        function QuestionEditorModal({ question, onSave, onClose }) {
+            const [formData, setFormData] = useState(question);
+            const [saving, setSaving] = useState(false);
+            
+            const updateOption = (index, value) => {
+                setFormData(prev => ({
+                    ...prev,
+                    options: prev.options.map((opt, i) => i === index ? value : opt)
+                }));
+            };
+            
+            const handleSave = async () => {
+                if (!formData.question.trim()) {
+                    alert('Please enter a question');
+                    return;
+                }
+                if (formData.options.some(o => !o.trim())) {
+                    alert('Please fill in all 4 answer options');
+                    return;
+                }
+                setSaving(true);
+                await onSave(formData);
+                setSaving(false);
+            };
+            
+            return (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                    <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+                        <div className="sticky top-0 bg-white border-b border-gray-100 px-6 py-4 flex justify-between items-center z-10">
+                            <h2 className="text-xl font-bold text-gray-800">{question.id ? '✏️ Edit Question' : '📝 Add Question'}</h2>
+                            <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-2xl">✕</button>
+                        </div>
+                        
+                        <div className="p-6 space-y-4">
+                            <div>
+                                <label className="block text-sm font-semibold text-gray-700 mb-1">Question</label>
+                                <textarea
+                                    value={formData.question}
+                                    onChange={e => setFormData(prev => ({ ...prev, question: e.target.value }))}
+                                    rows={2}
+                                    placeholder="What are the two pieces of ID required..."
+                                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                                />
+                            </div>
+                            
+                            <div>
+                                <label className="block text-sm font-semibold text-gray-700 mb-2">Answer Options (select the correct one)</label>
+                                <div className="space-y-2">
+                                    {formData.options.map((opt, i) => (
+                                        <div key={i} className="flex items-center gap-2">
+                                            <input
+                                                type="radio"
+                                                checked={formData.correctAnswer === i}
+                                                onChange={() => setFormData(prev => ({ ...prev, correctAnswer: i }))}
+                                                className="w-4 h-4 flex-shrink-0"
+                                            />
+                                            <input
+                                                type="text"
+                                                value={opt}
+                                                onChange={e => updateOption(i, e.target.value)}
+                                                placeholder={`Option ${i + 1}`}
+                                                className={`flex-1 px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none ${
+                                                    formData.correctAnswer === i ? 'border-green-300 bg-green-50' : 'border-gray-200'
+                                                }`}
+                                            />
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                            
+                            <div>
+                                <label className="block text-sm font-semibold text-gray-700 mb-1">Category (optional)</label>
+                                <input
+                                    type="text"
+                                    value={formData.category}
+                                    onChange={e => setFormData(prev => ({ ...prev, category: e.target.value }))}
+                                    placeholder="e.g. Patient Intake, EMR Navigation"
+                                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                                />
+                            </div>
+                        </div>
+                        
+                        <div className="sticky bottom-0 bg-white border-t border-gray-100 px-6 py-4 flex justify-end gap-3">
+                            <button onClick={onClose} className="px-6 py-2 border border-gray-200 text-gray-600 rounded-lg hover:bg-gray-50 transition">
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleSave}
+                                disabled={saving}
+                                className="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition font-semibold disabled:opacity-50"
+                            >
+                                {saving ? 'Saving...' : 'Save Question'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+        
+        // ============================================
+        // GENERATE QUESTIONS FROM JOURNEY (draft + review, not fully automatic)
+        // ============================================
+        function GenerateFromJourneyModal({ journeys, onClose, onSaved, showToast }) {
+            const [selectedJourneyId, setSelectedJourneyId] = useState('');
+            const [loadingSteps, setLoadingSteps] = useState(false);
+            const [draftQuestions, setDraftQuestions] = useState([]);
+            const [saving, setSaving] = useState(false);
+            
+            const generateDrafts = async () => {
+                if (!selectedJourneyId) return;
+                setLoadingSteps(true);
+                try {
+                    const { collection, getDocs, query, orderBy } = window.firebaseModules;
+                    const stepsSnap = await getDocs(query(collection(db, `journeys/${selectedJourneyId}/steps`), orderBy('order')));
+                    const steps = stepsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+                    
+                    // Draft one fill-in-style question per step title/description.
+                    // This is a starting point for the manager to review and edit - not a guaranteed-correct auto-generation.
+                    const journey = journeys.find(j => j.id === selectedJourneyId);
+                    const drafts = steps.slice(0, 10).map((step, i) => ({
+                        question: `What is the correct action for: "${step.title || 'this step'}"?`,
+                        options: [step.title || step.description || 'Correct action', 'Skip this step', 'Ask a colleague', 'None of the above'],
+                        correctAnswer: 0,
+                        category: journey?.title || '',
+                        sourceJourneyId: selectedJourneyId,
+                        _stepReference: step.title
+                    }));
+                    setDraftQuestions(drafts);
+                    
+                    if (drafts.length === 0) {
+                        showToast('This journey has no steps to generate questions from', 'error');
+                    }
+                } catch (err) {
+                    console.error('Error generating drafts:', err);
+                    showToast('Failed to load journey steps: ' + err.message, 'error');
+                } finally {
+                    setLoadingSteps(false);
+                }
+            };
+            
+            const updateDraft = (index, field, value) => {
+                setDraftQuestions(prev => prev.map((d, i) => i === index ? { ...d, [field]: value } : d));
+            };
+            
+            const updateDraftOption = (index, optIndex, value) => {
+                setDraftQuestions(prev => prev.map((d, i) => {
+                    if (i !== index) return d;
+                    return { ...d, options: d.options.map((o, oi) => oi === optIndex ? value : o) };
+                }));
+            };
+            
+            const removeDraft = (index) => {
+                setDraftQuestions(prev => prev.filter((_, i) => i !== index));
+            };
+            
+            const saveAllDrafts = async () => {
+                if (draftQuestions.length === 0) return;
+                setSaving(true);
+                try {
+                    const { doc, setDoc, serverTimestamp } = window.firebaseModules;
+                    for (const [i, draft] of draftQuestions.entries()) {
+                        const { _stepReference, ...toSave } = draft;
+                        const id = `question_journey_${selectedJourneyId}_${Date.now()}_${i}`;
+                        await setDoc(doc(db, 'quiz_questions', id), {
+                            ...toSave,
+                            isActive: true,
+                            createdAt: serverTimestamp(),
+                            updatedAt: serverTimestamp()
+                        });
+                    }
+                    showToast(`✅ Added ${draftQuestions.length} question${draftQuestions.length !== 1 ? 's' : ''} to the bank!`);
+                    onSaved();
+                } catch (err) {
+                    console.error('Error saving drafts:', err);
+                    showToast('Failed to save questions: ' + err.message, 'error');
+                } finally {
+                    setSaving(false);
+                }
+            };
+            
+            return (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                    <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+                        <div className="sticky top-0 bg-white border-b border-gray-100 px-6 py-4 flex justify-between items-center z-10">
+                            <h2 className="text-xl font-bold text-gray-800">🪄 Generate Questions from Journey</h2>
+                            <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-2xl">✕</button>
+                        </div>
+                        
+                        <div className="p-6 space-y-4">
+                            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-amber-700">
+                                This creates draft questions based on each step's title — review and edit the wording and 
+                                wrong answers below before saving, since they're a starting point, not final quiz-ready questions.
+                            </div>
+                            
+                            <div className="flex gap-2">
+                                <select
+                                    value={selectedJourneyId}
+                                    onChange={e => { setSelectedJourneyId(e.target.value); setDraftQuestions([]); }}
+                                    className="flex-1 px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                                >
+                                    <option value="">Select a journey...</option>
+                                    {journeys.map(j => (
+                                        <option key={j.id} value={j.id}>{j.title || 'Untitled Journey'}</option>
+                                    ))}
+                                </select>
+                                <button
+                                    onClick={generateDrafts}
+                                    disabled={!selectedJourneyId || loadingSteps}
+                                    className="px-5 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition font-semibold disabled:opacity-50 flex-shrink-0"
+                                >
+                                    {loadingSteps ? 'Loading...' : 'Generate'}
+                                </button>
+                            </div>
+                            
+                            {draftQuestions.length > 0 && (
+                                <div className="space-y-3">
+                                    <h3 className="font-bold text-gray-800">{draftQuestions.length} Draft Question{draftQuestions.length !== 1 ? 's' : ''} (review before saving)</h3>
+                                    {draftQuestions.map((draft, i) => (
+                                        <div key={i} className="border border-gray-200 rounded-lg p-3 bg-gray-50">
+                                            <div className="flex justify-between items-start mb-2">
+                                                <input
+                                                    type="text"
+                                                    value={draft.question}
+                                                    onChange={e => updateDraft(i, 'question', e.target.value)}
+                                                    className="flex-1 px-3 py-1.5 border border-gray-200 rounded-lg text-sm font-medium focus:ring-2 focus:ring-indigo-500 focus:outline-none mr-2"
+                                                />
+                                                <button onClick={() => removeDraft(i)} className="text-red-400 hover:text-red-600 text-sm flex-shrink-0">✕</button>
+                                            </div>
+                                            <div className="grid grid-cols-2 gap-2">
+                                                {draft.options.map((opt, oi) => (
+                                                    <div key={oi} className="flex items-center gap-1.5">
+                                                        <input
+                                                            type="radio"
+                                                            checked={draft.correctAnswer === oi}
+                                                            onChange={() => updateDraft(i, 'correctAnswer', oi)}
+                                                            className="w-3.5 h-3.5"
+                                                        />
+                                                        <input
+                                                            type="text"
+                                                            value={opt}
+                                                            onChange={e => updateDraftOption(i, oi, e.target.value)}
+                                                            className="flex-1 px-2 py-1 border border-gray-200 rounded text-xs focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                                                        />
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                        
+                        <div className="sticky bottom-0 bg-white border-t border-gray-100 px-6 py-4 flex justify-end gap-3">
+                            <button onClick={onClose} className="px-6 py-2 border border-gray-200 text-gray-600 rounded-lg hover:bg-gray-50 transition">
+                                Cancel
+                            </button>
+                            <button
+                                onClick={saveAllDrafts}
+                                disabled={saving || draftQuestions.length === 0}
+                                className="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition font-semibold disabled:opacity-50"
+                            >
+                                {saving ? 'Saving...' : `Save All ${draftQuestions.length} Question${draftQuestions.length !== 1 ? 's' : ''} to Bank`}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+        
         function QuizGames({ showToast }) {
+            const [view, setView] = useState('games'); // games | questionbank
             const [games, setGames] = useState([]);
             const [loading, setLoading] = useState(true);
             const [showCreateModal, setShowCreateModal] = useState(false);
@@ -3081,6 +3647,29 @@
                         return;
                     }
                     
+                    // Pull active questions from the Question Bank
+                    const questionsSnap = await getDocs(collection(db, 'quiz_questions'));
+                    const allQuestions = questionsSnap.docs
+                        .map(d => ({ id: d.id, ...d.data() }))
+                        .filter(qz => qz.isActive !== false);
+                    
+                    const neededCount = newGame.rounds * newGame.questionsPerRound;
+                    if (allQuestions.length === 0) {
+                        showToast('No questions in the Question Bank yet - add some first', 'error');
+                        return;
+                    }
+                    if (allQuestions.length < newGame.questionsPerRound) {
+                        showToast(`Question Bank only has ${allQuestions.length} question(s), but each round needs ${newGame.questionsPerRound}. Add more questions or lower questions/round.`, 'error');
+                        return;
+                    }
+                    
+                    // Shuffle and snapshot enough question IDs for all rounds (reuse/cycle if bank is smaller than total needed)
+                    const shuffledQuestions = [...allQuestions].sort(() => Math.random() - 0.5);
+                    const questionIds = [];
+                    for (let i = 0; i < neededCount; i++) {
+                        questionIds.push(shuffledQuestions[i % shuffledQuestions.length].id);
+                    }
+                    
                     // Auto-assign teams (simple random assignment for MVP)
                     const teamCount = Math.ceil(students.length / newGame.teamSize);
                     const shuffled = [...students].sort(() => Math.random() - 0.5);
@@ -3122,6 +3711,7 @@
                         questionsPerRound: newGame.questionsPerRound,
                         timePerQuestion: 20,
                         teams: teams,
+                        questionIds: questionIds,
                         createdAt: serverTimestamp()
                     });
                     
@@ -3160,17 +3750,43 @@
             
             return (
                 <div className="p-8">
-                    <div className="flex justify-between items-center mb-8">
+                    <div className="flex justify-between items-center mb-6">
                         <h1 className="text-3xl font-bold text-gray-800">🎮 Quiz Games</h1>
+                        {view === 'games' && (
+                            <button
+                                onClick={() => setShowCreateModal(true)}
+                                className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-purple-500 to-pink-600 hover:from-purple-600 hover:to-pink-700 text-white font-semibold rounded-lg transition shadow-lg"
+                            >
+                                <span className="text-xl">+</span>
+                                Create New Game
+                            </button>
+                        )}
+                    </div>
+                    
+                    {/* Tab Switcher */}
+                    <div className="flex gap-2 mb-6 border-b border-gray-200">
                         <button
-                            onClick={() => setShowCreateModal(true)}
-                            className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-purple-500 to-pink-600 hover:from-purple-600 hover:to-pink-700 text-white font-semibold rounded-lg transition shadow-lg"
+                            onClick={() => setView('games')}
+                            className={`px-6 py-3 font-semibold transition border-b-2 ${
+                                view === 'games' ? 'border-purple-600 text-purple-600' : 'border-transparent text-gray-500 hover:text-gray-700'
+                            }`}
                         >
-                            <span className="text-xl">+</span>
-                            Create New Game
+                            Games ({games.length})
+                        </button>
+                        <button
+                            onClick={() => setView('questionbank')}
+                            className={`px-6 py-3 font-semibold transition border-b-2 ${
+                                view === 'questionbank' ? 'border-purple-600 text-purple-600' : 'border-transparent text-gray-500 hover:text-gray-700'
+                            }`}
+                        >
+                            📝 Question Bank
                         </button>
                     </div>
                     
+                    {view === 'questionbank' && <QuestionBank showToast={showToast} />}
+                    
+                    {view === 'games' && (
+                    <>
                     {games.length === 0 ? (
                         <div className="bg-white rounded-xl shadow-lg p-12 text-center">
                             <div className="text-6xl mb-4">🎮</div>
@@ -3307,7 +3923,7 @@
                                     
                                     <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-3">
                                         <p className="text-xs text-blue-800">
-                                            <strong>ℹ️ Auto Team Assignment:</strong> Students will be randomly organized into balanced teams. Questions will be pulled from completed journeys.
+                                            <strong>ℹ️ Auto Team Assignment:</strong> Students will be randomly organized into balanced teams. Questions are pulled from your Question Bank (add some in the Question Bank tab before creating a game).
                                         </p>
                                     </div>
                                 </div>
@@ -3328,6 +3944,8 @@
                                 </div>
                             </div>
                         </div>
+                    )}
+                    </>
                     )}
                 </div>
             );

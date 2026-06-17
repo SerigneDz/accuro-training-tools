@@ -9,7 +9,7 @@
     <script type="module">
         import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
         import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut, sendPasswordResetEmail } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
-        import { getFirestore, collection, doc, getDoc, setDoc, updateDoc, query, where, getDocs, onSnapshot, arrayUnion, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+        import { getFirestore, collection, doc, getDoc, setDoc, updateDoc, query, where, getDocs, onSnapshot, arrayUnion, serverTimestamp, documentId } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
         
         // Make Firebase available globally
         window.firebaseModules = {
@@ -30,7 +30,8 @@
             onSnapshot,
             arrayUnion,
             serverTimestamp,
-            sendPasswordResetEmail
+            sendPasswordResetEmail,
+            documentId
         };
         window.firebaseModulesReady = true;
         window.dispatchEvent(new Event('firebase-modules-ready'));
@@ -1409,9 +1410,10 @@
                 return game.teams?.find(team => team.playerIds.includes(user.uid));
             };
             
-            const startRound = async (game) => {
-                // For MVP, generate sample questions
-                // In production, these would come from completed journeys
+            const startRound = async (game, roundNumber = 0) => {
+                const { collection, getDocs, query, where, documentId } = window.firebaseModules;
+                
+                // Fallback sample questions, used only if the game has no stored questionIds (legacy games created before the Question Bank existed)
                 const sampleQuestions = [
                     {
                         id: 'q1',
@@ -1470,8 +1472,40 @@
                     }
                 ];
                 
+                const perRound = game.questionsPerRound || 5;
+                let roundQuestions;
+                
+                if (game.questionIds && game.questionIds.length > 0) {
+                    try {
+                        // Pick this round's slice of the pre-shuffled question ID list (cycles if needed)
+                        const startIdx = (roundNumber * perRound) % game.questionIds.length;
+                        const idsForRound = [];
+                        for (let i = 0; i < perRound; i++) {
+                            idsForRound.push(game.questionIds[(startIdx + i) % game.questionIds.length]);
+                        }
+                        const uniqueIds = [...new Set(idsForRound)];
+                        
+                        // Firestore 'in' queries support up to 30 IDs at a time, which comfortably covers a round
+                        const snap = await getDocs(query(collection(db, 'quiz_questions'), where(documentId(), 'in', uniqueIds.slice(0, 30))));
+                        const fetched = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+                        // Preserve the intended order/repeats from idsForRound
+                        roundQuestions = idsForRound.map(id => fetched.find(q => q.id === id)).filter(Boolean);
+                        
+                        if (roundQuestions.length === 0) {
+                            console.warn('No questions found for stored questionIds, falling back to sample questions');
+                            roundQuestions = sampleQuestions;
+                        }
+                    } catch (err) {
+                        console.error('Error fetching round questions:', err);
+                        roundQuestions = sampleQuestions;
+                    }
+                } else {
+                    // Legacy game with no question bank reference
+                    roundQuestions = sampleQuestions;
+                }
+                
                 setSelectedGame(game);
-                setQuestions(sampleQuestions.slice(0, game.questionsPerRound || 5));
+                setQuestions(roundQuestions.slice(0, perRound));
                 setCurrentQuestion(0);
                 setUserAnswers([]);
                 setRoundComplete(false);

@@ -3358,6 +3358,8 @@
                 opt.toLowerCase().includes(searchQuery.toLowerCase())
             );
             
+            const allSelected = options.length > 0 && selectedValues.length === options.length;
+            
             const toggleValue = (value) => {
                 const updated = selectedValues.includes(value)
                     ? selectedValues.filter(v => v !== value)
@@ -3368,6 +3370,10 @@
             const removeValue = (value, e) => {
                 e.stopPropagation();
                 onChange(selectedValues.filter(v => v !== value));
+            };
+            
+            const toggleSelectAll = () => {
+                onChange(allSelected ? [] : [...options]);
             };
             
             return (
@@ -3381,6 +3387,11 @@
                         <div className="flex flex-wrap gap-1.5 flex-1">
                             {selectedValues.length === 0 ? (
                                 <span className="text-gray-400">{placeholder || 'Select...'}</span>
+                            ) : allSelected ? (
+                                <span className="inline-flex items-center gap-1 bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full text-xs font-medium">
+                                    All Specialties ({options.length})
+                                    <span onClick={(e) => { e.stopPropagation(); onChange([]); }} className="hover:text-indigo-900 cursor-pointer">✕</span>
+                                </span>
                             ) : (
                                 selectedValues.map(val => (
                                     <span key={val} className="inline-flex items-center gap-1 bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full text-xs font-medium">
@@ -3394,7 +3405,7 @@
                     </button>
                     
                     {isOpen && (
-                        <div className="absolute z-20 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-64 overflow-hidden flex flex-col">
+                        <div className="absolute z-20 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-72 overflow-hidden flex flex-col">
                             <div className="p-2 border-b border-gray-100">
                                 <input
                                     type="text"
@@ -3405,6 +3416,14 @@
                                     className="w-full px-2 py-1.5 border border-gray-200 rounded text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
                                 />
                             </div>
+                            <button
+                                type="button"
+                                onClick={toggleSelectAll}
+                                className="w-full flex items-center gap-2 px-3 py-2 text-left text-sm font-medium text-indigo-600 hover:bg-indigo-50 transition border-b border-gray-100"
+                            >
+                                <input type="checkbox" checked={allSelected} onChange={() => {}} className="w-4 h-4" />
+                                {allSelected ? 'Clear All' : `Select All (${options.length})`}
+                            </button>
                             <div className="overflow-y-auto flex-1">
                                 {filteredOptions.length === 0 ? (
                                     <p className="text-sm text-gray-400 text-center py-3">No matches</p>

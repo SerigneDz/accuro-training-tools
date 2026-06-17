@@ -755,11 +755,16 @@
                     
                     setCourses(coursesSnap.docs.map(d => ({ id: d.id, ...d.data() })));
                     
-                    // Filter position assignments case-insensitively against the student's specialty
-                    const myPosition = (userProfile.specialty || '').toLowerCase();
+                    // Match position-based assignments against the student's specialties array
+                    // (supports both the new multi-specialty array and legacy single specialty/position field)
+                    const myStudentSpecialties = (userProfile.specialties && userProfile.specialties.length > 0)
+                        ? userProfile.specialties
+                        : [userProfile.specialty || userProfile.position].filter(Boolean);
+                    const mySpecialtiesLower = myStudentSpecialties.map(s => s.toLowerCase());
+                    
                     const posAssignments = posAssignSnap.docs
                         .map(d => ({ id: d.id, ...d.data() }))
-                        .filter(a => (a.position || '').toLowerCase() === myPosition);
+                        .filter(a => (a.specialties || []).some(s => mySpecialtiesLower.includes(s.toLowerCase())));
                     
                     const allAssignments = [
                         ...posAssignments,

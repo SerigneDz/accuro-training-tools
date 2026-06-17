@@ -419,9 +419,26 @@
             
             const calculateProgress = () => {
                 if (!schedule) return 0;
-                const total = schedule.items.length;
-                const completed = schedule.items.filter(item => item.scheduleItemStatus === 'completed').length;
-                return total > 0 ? Math.round((completed / total) * 100) : 0;
+                let totalTasks = 0;
+                let completedTasks = 0;
+                let daysWithNoTasks = 0;
+                let daysWithNoTasksCompleted = 0;
+                
+                schedule.items.forEach(item => {
+                    const tasks = item.tasks || [];
+                    if (tasks.length === 0) {
+                        daysWithNoTasks++;
+                        if (item.scheduleItemStatus === 'completed') daysWithNoTasksCompleted++;
+                    } else {
+                        totalTasks += tasks.length;
+                        completedTasks += tasks.filter(t => t.status === 'completed').length;
+                    }
+                });
+                
+                const combinedTotal = totalTasks + daysWithNoTasks;
+                const combinedCompleted = completedTasks + daysWithNoTasksCompleted;
+                
+                return combinedTotal > 0 ? Math.round((combinedCompleted / combinedTotal) * 100) : 0;
             };
             
             const toggleTaskComplete = async (dayIndex, taskIndex) => {

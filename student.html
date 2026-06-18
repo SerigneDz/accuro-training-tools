@@ -1377,6 +1377,9 @@
             const [questions, setQuestions] = useState([]);
             const [userAnswers, setUserAnswers] = useState([]);
             const [roundComplete, setRoundComplete] = useState(false);
+            const [showPauseConfirm, setShowPauseConfirm] = useState(false);
+            const [hasSavedProgress, setHasSavedProgress] = useState(false);
+            const [savedProgressGame, setSavedProgressGame] = useState(null); // gameId with saved progress
             
             useEffect(() => {
                 loadActiveGames();
@@ -1400,9 +1403,100 @@
                     
                     setActiveGames(userGames);
                     setLoading(false);
+                    
+                    // Check for any saved progress across games
+                    await checkForSavedProgress(userGames);
                 } catch (err) {
                     console.error('Error loading games:', err);
                     setLoading(false);
+                }
+            };
+            
+            const checkForSavedProgress = async (games) => {
+                try {
+                    const { collection, getDocs } = window.firebaseModules;
+                    const snap = await getDocs(collection(db, 'quiz_progress'));
+                    const myProgress = snap.docs.find(d => {
+                        const data = d.data();
+                        return data.userId === user.uid && games.some(g => g.id === data.gameId);
+                    });
+                    if (myProgress) {
+                        setSavedProgressGame(myProgress.data().gameId);
+                        setHasSavedProgress(true);
+                    }
+                } catch (err) {
+                    console.error('Error checking saved progress:', err);
+                }
+            };
+            
+            const saveProgress = async () => {
+                const { doc, setDoc, serverTimestamp } = window.firebaseModules;
+                const progressId = `${user.uid}_${selectedGame.id}`;
+                try {
+                    await setDoc(doc(db, 'quiz_progress', progressId), {
+                        userId: user.uid,
+                        gameId: selectedGame.id,
+                        questionIndex: currentQuestion,
+                        questions: questions,
+                        userAnswers: userAnswers,
+                        pausedAt: serverTimestamp()
+                    });
+                } catch (err) {
+                    console.error('Error saving progress:', err);
+                    throw err;
+                }
+            };
+            
+            const pauseRound = async () => {
+                try {
+                    await saveProgress();
+                    setShowPauseConfirm(false);
+                    setCurrentView('lobby');
+                    setSelectedGame(null);
+                    setSavedProgressGame(selectedGame.id);
+                    setHasSavedProgress(true);
+                } catch (err) {
+                    alert('Failed to save progress. Please try again.');
+                }
+            };
+            
+            const resumeRound = async (game) => {
+                const { doc, getDoc, deleteDoc } = window.firebaseModules;
+                const progressId = `${user.uid}_${game.id}`;
+                try {
+                    const progressDoc = await getDoc(doc(db, 'quiz_progress', progressId));
+                    if (!progressDoc.exists()) {
+                        // Progress doc gone — start fresh
+                        setHasSavedProgress(false);
+                        setSavedProgressGame(null);
+                        await startRound(game);
+                        return;
+                    }
+                    const data = progressDoc.data();
+                    setSelectedGame(game);
+                    setQuestions(data.questions || []);
+                    setCurrentQuestion(data.questionIndex || 0);
+                    setUserAnswers(data.userAnswers || []);
+                    setRoundComplete(false);
+                    setCurrentView('playing');
+                    // Delete saved progress now that we've resumed
+                    await deleteDoc(doc(db, 'quiz_progress', progressId));
+                    setHasSavedProgress(false);
+                    setSavedProgressGame(null);
+                } catch (err) {
+                    console.error('Error resuming round:', err);
+                    alert('Failed to resume. Please try starting a new round.');
+                }
+            };
+            
+            const abandonSavedProgress = async (gameId) => {
+                const { doc, deleteDoc } = window.firebaseModules;
+                try {
+                    await deleteDoc(doc(db, 'quiz_progress', `${user.uid}_${gameId}`));
+                    setHasSavedProgress(false);
+                    setSavedProgressGame(null);
+                } catch (err) {
+                    console.error('Error abandoning progress:', err);
                 }
             };
             
@@ -1411,6 +1505,22 @@
             };
             
             const startRound = async (game, roundNumber = 0) => {
+                // If there's saved progress for this game, route to resume instead
+                const { doc, getDoc } = window.firebaseModules;
+                const progressId = `${user.uid}_${game.id}`;
+                try {
+                    const progressDoc = await getDoc(doc(db, 'quiz_progress', progressId));
+                    if (progressDoc.exists()) {
+                        // Has saved progress - let the lobby UI show Resume/Start Fresh via hasSavedProgress state
+                        // (already set via checkForSavedProgress, but make sure it's current)
+                        setSavedProgressGame(game.id);
+                        setHasSavedProgress(true);
+                        return; // Let the lobby Resume button handle it
+                    }
+                } catch (err) {
+                    console.error('Error checking for saved progress:', err);
+                }
+                
                 const { collection, getDocs, query, where, documentId } = window.firebaseModules;
                 
                 // Fallback sample questions, used only if the game has no stored questionIds (legacy games created before the Question Bank existed)
@@ -1554,15 +1664,53 @@
                                         <h1 className="text-xl font-bold text-gray-800">{selectedGame.name}</h1>
                                         <p className="text-sm text-gray-600">Question {currentQuestion + 1} of {questions.length}</p>
                                     </div>
-                                    <div className="text-right">
-                                        <div className="text-sm text-gray-600">Your Team</div>
-                                        <div className="font-bold" style={{ color: getUserTeam(selectedGame).color }}>
-                                            {getUserTeam(selectedGame).name}
+                                    <div className="flex items-center gap-4">
+                                        <div className="text-right">
+                                            <div className="text-sm text-gray-600">Your Team</div>
+                                            <div className="font-bold" style={{ color: getUserTeam(selectedGame).color }}>
+                                                {getUserTeam(selectedGame).name}
+                                            </div>
                                         </div>
+                                        <button
+                                            onClick={() => setShowPauseConfirm(true)}
+                                            className="px-3 py-2 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 transition text-sm font-medium flex items-center gap-1"
+                                        >
+                                            ⏸ Pause
+                                        </button>
                                     </div>
                                 </div>
                             </div>
                         </div>
+                        
+                        {/* Pause Confirmation Overlay */}
+                        {showPauseConfirm && (
+                            <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4">
+                                <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-sm w-full text-center">
+                                    <div className="text-5xl mb-4">⏸️</div>
+                                    <h3 className="text-xl font-bold text-gray-800 mb-2">Pause Round?</h3>
+                                    <p className="text-gray-600 text-sm mb-2">
+                                        Your progress will be saved. You've answered {currentQuestion} of {questions.length} questions.
+                                    </p>
+                                    <p className="text-gray-500 text-xs mb-6">
+                                        You can resume exactly where you left off next time you open Quiz Games.
+                                    </p>
+                                    <div className="flex gap-3">
+                                        <button
+                                            onClick={() => setShowPauseConfirm(false)}
+                                            className="flex-1 px-4 py-3 bg-gray-100 text-gray-700 rounded-lg font-semibold hover:bg-gray-200 transition"
+                                        >
+                                            Keep Playing
+                                        </button>
+                                        <button
+                                            onClick={pauseRound}
+                                            className="flex-1 px-4 py-3 bg-gradient-to-r from-purple-500 to-pink-600 text-white font-semibold rounded-lg hover:from-purple-600 hover:to-pink-700 transition"
+                                        >
+                                            Save & Exit
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
                         
                         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
                             <div className="bg-white rounded-xl shadow-2xl p-8">
@@ -1739,12 +1887,39 @@
                                                     </div>
                                                 </div>
                                                 
-                                                <button
-                                                    onClick={() => startRound(game)}
-                                                    className="w-full px-6 py-4 bg-gradient-to-r from-purple-500 to-pink-600 hover:from-purple-600 hover:to-pink-700 text-white font-bold rounded-lg transition text-lg"
-                                                >
-                                                    🎮 Play Round
-                                                </button>
+                                                {hasSavedProgress && savedProgressGame === game.id ? (
+                                                    <div className="space-y-2">
+                                                        <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-2 text-sm text-amber-700 text-center">
+                                                            ⏸️ You have a paused round in progress
+                                                        </div>
+                                                        <div className="flex gap-2">
+                                                            <button
+                                                                onClick={() => resumeRound(game)}
+                                                                className="flex-1 px-4 py-3 bg-gradient-to-r from-purple-500 to-pink-600 hover:from-purple-600 hover:to-pink-700 text-white font-bold rounded-lg transition"
+                                                            >
+                                                                ▶ Resume Round
+                                                            </button>
+                                                            <button
+                                                                onClick={async () => {
+                                                                    if (confirm('Start a new round? Your paused progress will be lost.')) {
+                                                                        await abandonSavedProgress(game.id);
+                                                                        startRound(game);
+                                                                    }
+                                                                }}
+                                                                className="px-4 py-3 bg-gray-100 text-gray-700 font-semibold rounded-lg hover:bg-gray-200 transition text-sm"
+                                                            >
+                                                                Start Fresh
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                ) : (
+                                                    <button
+                                                        onClick={() => startRound(game)}
+                                                        className="w-full px-6 py-4 bg-gradient-to-r from-purple-500 to-pink-600 hover:from-purple-600 hover:to-pink-700 text-white font-bold rounded-lg transition text-lg"
+                                                    >
+                                                        🎮 Play Round
+                                                    </button>
+                                                )}
                                             </div>
                                         </div>
                                     );

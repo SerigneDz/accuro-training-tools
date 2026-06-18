@@ -3436,25 +3436,81 @@
                 if (!selectedJourneyId) return;
                 setLoadingSteps(true);
                 try {
-                    const { collection, getDocs, query, orderBy } = window.firebaseModules;
-                    const stepsSnap = await getDocs(query(collection(db, `journeys/${selectedJourneyId}/steps`), orderBy('order')));
-                    const steps = stepsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-                    
-                    // Draft one fill-in-style question per step title/description.
-                    // This is a starting point for the manager to review and edit - not a guaranteed-correct auto-generation.
+                    const { doc, getDoc } = window.firebaseModules;
                     const journey = journeys.find(j => j.id === selectedJourneyId);
-                    const drafts = steps.slice(0, 10).map((step, i) => ({
-                        question: `What is the correct action for: "${step.title || 'this step'}"?`,
-                        options: [step.title || step.description || 'Correct action', 'Skip this step', 'Ask a colleague', 'None of the above'],
-                        correctAnswer: 0,
-                        category: journey?.title || '',
-                        sourceJourneyId: selectedJourneyId,
-                        _stepReference: step.title
-                    }));
-                    setDraftQuestions(drafts);
+                    
+                    if (!journey || !journey.stepIds || journey.stepIds.length === 0) {
+                        showToast('This journey has no steps to generate questions from', 'error');
+                        setDraftQuestions([]);
+                        return;
+                    }
+                    
+                    // Steps live in a top-level 'steps' collection, referenced by ID from the journey's stepIds array
+                    const stepsPromises = journey.stepIds.map(stepId => getDoc(doc(db, 'steps', stepId)));
+                    const stepsDocs = await Promise.all(stepsPromises);
+                    const steps = stepsDocs
+                        .filter(d => d.exists())
+                        .map(d => ({ id: d.id, ...d.data() }))
+                        .sort((a, b) => (a.order || 0) - (b.order || 0));
+                    
+                    // Fetch tasks for every step (each step references its tasks via taskIds)
+                    const allTaskIds = steps.flatMap(s => s.taskIds || []);
+                    const taskPromises = allTaskIds.map(taskId => getDoc(doc(db, 'tasks', taskId)));
+                    const taskDocs = await Promise.all(taskPromises);
+                    const tasksById = {};
+                    taskDocs.filter(d => d.exists()).forEach(d => { tasksById[d.id] = { id: d.id, ...d.data() }; });
+                    
+                    // Pool of all real task actions across the journey, used as plausible wrong-answer distractors
+                    const allActions = Object.values(tasksById).map(t => t.action).filter(Boolean);
+                    
+                    const drafts = [];
+                    steps.forEach(step => {
+                        const stepTasks = (step.taskIds || []).map(id => tasksById[id]).filter(Boolean);
+                        
+                        if (stepTasks.length > 0) {
+                            // One question per task: correct answer = the real action, distractors = other real actions from this journey
+                            stepTasks.forEach(task => {
+                                if (!task.action) return;
+                                const distractorPool = allActions.filter(a => a !== task.action);
+                                const shuffledDistractors = [...distractorPool].sort(() => Math.random() - 0.5).slice(0, 3);
+                                // Pad with generic distractors if the journey doesn't have enough other real actions yet
+                                while (shuffledDistractors.length < 3) {
+                                    shuffledDistractors.push(['Skip this step', 'Ask a colleague to do it', 'Note it for later'][shuffledDistractors.length]);
+                                }
+                                const options = [task.action, ...shuffledDistractors];
+                                const correctIndex = 0; // will be re-shuffled below
+                                
+                                // Shuffle option order so the correct answer isn't always first
+                                const indices = [0, 1, 2, 3].sort(() => Math.random() - 0.5);
+                                const shuffledOptions = indices.map(i => options[i]);
+                                const newCorrectAnswer = indices.indexOf(correctIndex);
+                                
+                                drafts.push({
+                                    question: `During "${step.title}", what should you do${task.accuroNavigation ? ` (${task.accuroNavigation})` : ''}?`,
+                                    options: shuffledOptions,
+                                    correctAnswer: newCorrectAnswer,
+                                    category: journey?.title || '',
+                                    sourceJourneyId: selectedJourneyId,
+                                    _stepReference: step.title
+                                });
+                            });
+                        } else if (step.outcome) {
+                            // Fallback for steps with no tasks: use the step's outcome as the basis
+                            drafts.push({
+                                question: `What is the expected outcome of "${step.title}"?`,
+                                options: [step.outcome, 'The task is skipped', 'Escalate to a manager', 'None of the above'],
+                                correctAnswer: 0,
+                                category: journey?.title || '',
+                                sourceJourneyId: selectedJourneyId,
+                                _stepReference: step.title
+                            });
+                        }
+                    });
+                    
+                    setDraftQuestions(drafts.slice(0, 15));
                     
                     if (drafts.length === 0) {
-                        showToast('This journey has no steps to generate questions from', 'error');
+                        showToast('This journey\'s steps have no task actions or outcomes to draft questions from', 'error');
                     }
                 } catch (err) {
                     console.error('Error generating drafts:', err);
@@ -3514,8 +3570,9 @@
                         
                         <div className="p-6 space-y-4">
                             <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-amber-700">
-                                This creates draft questions based on each step's title — review and edit the wording and 
-                                wrong answers below before saving, since they're a starting point, not final quiz-ready questions.
+                                This drafts one question per task in the journey, using the real task action as the correct answer 
+                                and other real actions from this journey as wrong answers (with generic fallbacks if there aren't enough). 
+                                Review and edit the wording and answer choices below before saving — these are a starting point, not final quiz-ready questions.
                             </div>
                             
                             <div className="flex gap-2">

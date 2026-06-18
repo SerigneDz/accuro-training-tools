@@ -3747,6 +3747,21 @@
                 setTeams(prev => [...prev, { ...nextColor, playerIds: [], totalPoints: 0, roundScores: [] }]);
             };
             
+            const removeTeam = (teamId) => {
+                const team = teams.find(t => t.id === teamId);
+                if (!team) return;
+                if (team.playerIds.length > 0) {
+                    showToast(`Move all players out of "${team.name}" before removing it`, 'error');
+                    return;
+                }
+                if (teams.length <= 1) {
+                    showToast('A game needs at least one team', 'error');
+                    return;
+                }
+                if (!confirm(`Remove "${team.name}"? This cannot be undone once saved.`)) return;
+                setTeams(prev => prev.filter(t => t.id !== teamId));
+            };
+            
             const saveTeams = async () => {
                 setSaving(true);
                 try {
@@ -3863,10 +3878,24 @@
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     {teams.map(team => (
                                         <div key={team.id} className="border border-gray-200 rounded-lg p-3">
-                                            <div className="flex items-center gap-2 mb-2">
-                                                <div className="w-3 h-3 rounded-full" style={{ backgroundColor: team.color }}></div>
-                                                <span className="font-semibold text-gray-700">{team.name}</span>
-                                                <span className="text-xs text-gray-400">({team.playerIds.length} players · {team.totalPoints} pts)</span>
+                                            <div className="flex items-center justify-between gap-2 mb-2">
+                                                <div className="flex items-center gap-2">
+                                                    <div className="w-3 h-3 rounded-full" style={{ backgroundColor: team.color }}></div>
+                                                    <span className="font-semibold text-gray-700">{team.name}</span>
+                                                    <span className="text-xs text-gray-400">({team.playerIds.length} players · {team.totalPoints} pts)</span>
+                                                </div>
+                                                <button
+                                                    onClick={() => removeTeam(team.id)}
+                                                    disabled={team.playerIds.length > 0}
+                                                    title={team.playerIds.length > 0 ? 'Move all players out first' : 'Remove this team'}
+                                                    className={`text-xs px-2 py-0.5 rounded transition ${
+                                                        team.playerIds.length > 0 
+                                                            ? 'text-gray-300 cursor-not-allowed' 
+                                                            : 'text-red-400 hover:text-red-600 hover:bg-red-50'
+                                                    }`}
+                                                >
+                                                    ✕ Remove Team
+                                                </button>
                                             </div>
                                             <div className="space-y-1.5">
                                                 {team.playerIds.length === 0 ? (

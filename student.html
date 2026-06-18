@@ -1473,19 +1473,23 @@
                         return;
                     }
                     const data = progressDoc.data();
+                    // Restore state first — UI transitions to playing immediately
                     setSelectedGame(game);
                     setQuestions(data.questions || []);
                     setCurrentQuestion(data.questionIndex || 0);
                     setUserAnswers(data.userAnswers || []);
                     setRoundComplete(false);
-                    setCurrentView('playing');
-                    // Delete saved progress now that we've resumed
-                    await deleteDoc(doc(db, 'quiz_progress', progressId));
                     setHasSavedProgress(false);
                     setSavedProgressGame(null);
+                    setCurrentView('playing');
+                    // Delete the progress doc asynchronously — failure here is non-fatal
+                    // (worst case: student sees Resume banner again next session and taps it again)
+                    deleteDoc(doc(db, 'quiz_progress', progressId)).catch(err => {
+                        console.warn('Could not delete progress doc, non-fatal:', err);
+                    });
                 } catch (err) {
-                    console.error('Error resuming round:', err);
-                    alert('Failed to resume. Please try starting a new round.');
+                    console.error('Error loading saved progress:', err);
+                    alert('Failed to load saved progress. Please try starting a new round.');
                 }
             };
             
@@ -1622,21 +1626,54 @@
                 setCurrentView('playing');
             };
             
-            const submitAnswer = (answerIndex) => {
+            const submitAnswer = async (answerIndex) => {
                 const isCorrect = questions[currentQuestion].correctAnswer === answerIndex;
                 const points = isCorrect ? 50 : 0;
                 
-                setUserAnswers([...userAnswers, {
+                const updatedAnswers = [...userAnswers, {
                     questionId: questions[currentQuestion].id,
                     answer: answerIndex,
                     correct: isCorrect,
                     points: points
-                }]);
+                }];
+                
+                setUserAnswers(updatedAnswers);
                 
                 if (currentQuestion < questions.length - 1) {
                     setCurrentQuestion(currentQuestion + 1);
                 } else {
+                    // Round complete — calculate total and write back to Firestore
                     setRoundComplete(true);
+                    
+                    const roundTotal = updatedAnswers.reduce((sum, a) => sum + a.points, 0);
+                    const myTeam = getUserTeam(selectedGame);
+                    
+                    if (myTeam && roundTotal > 0) {
+                        try {
+                            const { doc, updateDoc } = window.firebaseModules;
+                            // Update team's totalPoints and append this round's score
+                            const updatedTeams = (selectedGame.teams || []).map(team => {
+                                if (team.id !== myTeam.id) return team;
+                                return {
+                                    ...team,
+                                    totalPoints: (team.totalPoints || 0) + roundTotal,
+                                    roundScores: [...(team.roundScores || []), {
+                                        playerId: user.uid,
+                                        points: roundTotal,
+                                        correct: updatedAnswers.filter(a => a.correct).length,
+                                        total: updatedAnswers.length,
+                                        completedAt: new Date().toISOString()
+                                    }]
+                                };
+                            });
+                            await updateDoc(doc(db, 'quizGames', selectedGame.id), { teams: updatedTeams });
+                            // Update local selectedGame so leaderboard reflects new points immediately on back
+                            setSelectedGame(prev => ({ ...prev, teams: updatedTeams }));
+                        } catch (err) {
+                            console.error('Error saving round score:', err);
+                            // Non-fatal — round still shows as complete to the student
+                        }
+                    }
                 }
             };
             
@@ -1808,6 +1845,7 @@
                                     onClick={() => {
                                         setCurrentView('lobby');
                                         setSelectedGame(null);
+                                        loadActiveGames(); // Refresh so leaderboard shows updated scores
                                     }}
                                     className="flex-1 px-6 py-3 bg-gradient-to-r from-purple-500 to-pink-600 text-white font-semibold rounded-lg hover:from-purple-600 hover:to-pink-700 transition"
                                 >

@@ -1508,23 +1508,23 @@
                 return game.teams?.find(team => team.playerIds.includes(user.uid));
             };
             
-            const startRound = async (game, roundNumber = 0) => {
+            const startRound = async (game, roundNumber = 0, skipProgressCheck = false) => {
                 // If there's saved progress for this game, route to resume instead
-                const { doc, getDoc } = window.firebaseModules;
-                const progressId = `${user.uid}_${game.id}`;
-                try {
-                    const progressDoc = await getDoc(doc(db, 'quiz_progress', progressId));
-                    if (progressDoc.exists()) {
-                        // Has saved progress - let the lobby UI show Resume/Start Fresh via hasSavedProgress state
-                        // (already set via checkForSavedProgress, but make sure it's current)
-                        setSavedProgressGame(game.id);
-                        setHasSavedProgress(true);
-                        return; // Let the lobby Resume button handle it
+                // (skipped when called from Start Fresh, since progress was already abandoned)
+                if (!skipProgressCheck) {
+                    const { doc, getDoc } = window.firebaseModules;
+                    const progressId = `${user.uid}_${game.id}`;
+                    try {
+                        const progressDoc = await getDoc(doc(db, 'quiz_progress', progressId));
+                        if (progressDoc.exists()) {
+                            setSavedProgressGame(game.id);
+                            setHasSavedProgress(true);
+                            return;
+                        }
+                    } catch (err) {
+                        console.error('Error checking for saved progress:', err);
                     }
-                } catch (err) {
-                    console.error('Error checking for saved progress:', err);
                 }
-                
                 const { collection, getDocs, query, where, documentId } = window.firebaseModules;
                 
                 // Fallback sample questions, used only if the game has no stored questionIds (legacy games created before the Question Bank existed)
@@ -1941,7 +1941,7 @@
                                                                 onClick={async () => {
                                                                     if (confirm('Start a new round? Your paused progress will be lost.')) {
                                                                         await abandonSavedProgress(game.id);
-                                                                        startRound(game);
+                                                                        startRound(game, 0, true); // skip progress check - already abandoned
                                                                     }
                                                                 }}
                                                                 className="px-4 py-3 bg-gray-100 text-gray-700 font-semibold rounded-lg hover:bg-gray-200 transition text-sm"

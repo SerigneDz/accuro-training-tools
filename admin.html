@@ -198,6 +198,9 @@
         // ============================================
         // HEALTHCARE CALENDAR TEMPLATES - CONSTANTS & HELPERS
         // ============================================
+        // Module-level variable so it survives React state resets (e.g. after signOut clears userProfile)
+        let _accessDeniedReason = null;
+        
         const HEALTHCARE_POSITIONS = [
             { value: 'MOA', label: 'Medical Office Assistant (MOA)' },
             { value: 'Nurse', label: 'Registered Nurse (RN)' },
@@ -7501,11 +7504,15 @@
         // ADMIN LOGIN COMPONENT
         // ============================================
         function AdminLogin() {
-            // Load saved email from localStorage
             const [email, setEmail] = useState(localStorage.getItem('accuro_admin_email') || '');
             const [password, setPassword] = useState('');
-            const [error, setError] = useState('');
+            const [error, setError] = useState(_accessDeniedReason || '');
             const [loading, setLoading] = useState(false);
+            
+            // Clear the module-level reason once we've read it so it doesn't persist after another login attempt
+            useEffect(() => {
+                if (_accessDeniedReason) _accessDeniedReason = null;
+            }, []);
 
             const handleLogin = async (e) => {
                 e.preventDefault();
@@ -7675,7 +7682,7 @@
                             setUserProfile(profile);
                             
                             if (profile.role !== 'trainer') {
-                                alert('Access denied. This panel is for trainers only.');
+                                _accessDeniedReason = 'This panel is for trainers only. Please use the student portal.';
                                 const { signOut } = window.firebaseModules;
                                 await signOut(auth);
                             } else {

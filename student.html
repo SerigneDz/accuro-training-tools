@@ -204,21 +204,23 @@
             return 'completed';
         }
         
+        // Module-level variable so it survives React state resets after signOut
+        let _accessDeniedReason = null;
+        
         // ============================================
         // LOGIN PAGE
         // ============================================
         function LoginPage() {
             const [email, setEmail] = useState('');
             const [password, setPassword] = useState('');
-            const [error, setError] = useState('');
+            const [error, setError] = useState(_accessDeniedReason || '');
             const [loading, setLoading] = useState(false);
             const [showResetPassword, setShowResetPassword] = useState(false);
-            const [resetEmail, setResetEmail] = useState('');
-            const [resetMessage, setResetMessage] = useState('');
-
+            
             useEffect(() => {
                 const savedEmail = localStorage.getItem('accuro_last_email');
                 if (savedEmail) setEmail(savedEmail);
+                if (_accessDeniedReason) _accessDeniedReason = null;
             }, []);
 
             const handleLogin = async (e) => {
@@ -2387,7 +2389,7 @@
                             if (userData.role === 'student') {
                                 setUserProfile(userData);
                             } else {
-                                alert('Access denied. This is the student portal.');
+                                _accessDeniedReason = 'This portal is for students only. Please use the admin panel.';
                                 const { signOut } = window.firebaseModules;
                                 await signOut(auth);
                             }

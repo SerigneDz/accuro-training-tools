@@ -1054,19 +1054,26 @@
                     // Journey specialties are stored as name strings (e.g. 'Nurse'), not IDs
                     const names = data.map(s => s.name);
                     const canonicalList = names.length > 0 ? names : [
-                        'Nurse', 'MOA', 'Dietician', 'Physician', 'Pharmacist', 'Lab Technician'
+                        'Nurse', 'MOA', 'Dietitian', 'Physician', 'Pharmacy', 'Lab Technician'
                     ];
                     setAvailableSpecialties(canonicalList);
                     
-                    // Normalize existing stored specialty values to canonical casing
-                    // (old system stored lowercase e.g. 'nurse', new system uses 'Nurse')
+                    // Normalize existing stored specialty values:
+                    // 1. Check explicit rename map first (handles semantic renames e.g. Pharmacist → Pharmacy)
+                    // 2. Fall back to case-insensitive match (handles casing-only differences e.g. 'nurse' → 'Nurse')
+                    // 3. Keep original if no match found (so nothing is silently lost)
+                    const LEGACY_RENAME_MAP = {
+                        'pharmacist': 'Pharmacy',
+                        'dietician': 'Dietitian', // spelling correction between old and new
+                    };
                     const storedSpecialties = formData.specialties || [];
                     if (storedSpecialties.length > 0) {
                         const normalized = storedSpecialties.map(stored => {
-                            const match = canonicalList.find(c => c.toLowerCase() === stored.toLowerCase());
-                            return match || stored; // Keep original if no match found
+                            const lowerStored = (stored || '').toLowerCase();
+                            if (LEGACY_RENAME_MAP[lowerStored]) return LEGACY_RENAME_MAP[lowerStored];
+                            const match = canonicalList.find(c => c.toLowerCase() === lowerStored);
+                            return match || stored;
                         });
-                        // Only update if normalization actually changed something
                         if (normalized.some((v, i) => v !== storedSpecialties[i])) {
                             setFormData(prev => ({ ...prev, specialties: normalized }));
                         }
@@ -1074,7 +1081,7 @@
                 } catch (error) {
                     console.error('Error loading specialties:', error);
                     setAvailableSpecialties([
-                        'Nurse', 'MOA', 'Dietician', 'Physician', 'Pharmacist', 'Lab Technician'
+                        'Nurse', 'MOA', 'Dietitian', 'Physician', 'Pharmacy', 'Lab Technician'
                     ]);
                 }
             };

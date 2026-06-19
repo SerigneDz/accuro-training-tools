@@ -956,16 +956,11 @@
                                                     <>
                                                         <strong>
                                                             {journey.specialties.map(s => {
-                                                                const displayNames = {
-                                                                    'nurse': 'Nurse',
-                                                                    'moa': 'MOA',
-                                                                    'dietician': 'Dietician',
-                                                                    'physician': 'Physician',
-                                                                    'pharmacist': 'Pharmacist',
-                                                                    'lab_tech': 'Lab Tech'
-                                                                };
-                                                                // Handle string safely
-                                                                return displayNames[s] || (typeof s === 'string' ? s.charAt(0).toUpperCase() + s.slice(1) : s);
+                                                                // Capitalize first letter of each word to handle old lowercase values
+                                                                const display = typeof s === 'string' 
+                                                                    ? s.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')
+                                                                    : s;
+                                                                return display;
                                                             }).join(', ')}
                                                         </strong>
                                                     </>
@@ -1058,9 +1053,24 @@
                     
                     // Journey specialties are stored as name strings (e.g. 'Nurse'), not IDs
                     const names = data.map(s => s.name);
-                    setAvailableSpecialties(names.length > 0 ? names : [
+                    const canonicalList = names.length > 0 ? names : [
                         'Nurse', 'MOA', 'Dietician', 'Physician', 'Pharmacist', 'Lab Technician'
-                    ]);
+                    ];
+                    setAvailableSpecialties(canonicalList);
+                    
+                    // Normalize existing stored specialty values to canonical casing
+                    // (old system stored lowercase e.g. 'nurse', new system uses 'Nurse')
+                    const storedSpecialties = formData.specialties || [];
+                    if (storedSpecialties.length > 0) {
+                        const normalized = storedSpecialties.map(stored => {
+                            const match = canonicalList.find(c => c.toLowerCase() === stored.toLowerCase());
+                            return match || stored; // Keep original if no match found
+                        });
+                        // Only update if normalization actually changed something
+                        if (normalized.some((v, i) => v !== storedSpecialties[i])) {
+                            setFormData(prev => ({ ...prev, specialties: normalized }));
+                        }
+                    }
                 } catch (error) {
                     console.error('Error loading specialties:', error);
                     setAvailableSpecialties([

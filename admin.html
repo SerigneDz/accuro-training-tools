@@ -669,22 +669,6 @@
                         <h1 className="text-3xl font-bold text-gray-800">🗺️ Journey Management</h1>
                         <div className="flex gap-3">
                             <button
-                                onClick={() => {
-                                    createNewJourney();
-                                    // Wait for journey editor to open, then trigger recording
-                                    setTimeout(() => {
-                                        const recordBtn = document.querySelector('[data-action="start-recording"]');
-                                        if (recordBtn) {
-                                            recordBtn.click();
-                                        }
-                                    }, 500);
-                                }}
-                                className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-red-500 to-pink-600 text-white rounded-lg hover:from-red-600 hover:to-pink-700 transition font-semibold"
-                            >
-                                <span className="text-xl">🎥</span>
-                                Record & Create Journey
-                            </button>
-                            <button
                                 onClick={createNewJourney}
                                 data-action="create-journey"
                                 className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-blue-500 to-indigo-600 text-white rounded-lg hover:from-blue-600 hover:to-indigo-700 transition font-semibold"

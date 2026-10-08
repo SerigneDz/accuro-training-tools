@@ -8,13 +8,13 @@
     <!-- Firebase v9 -->
     <script type="module">
         import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
-        import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut, sendPasswordResetEmail } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
+        import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut, sendPasswordResetEmail, updateProfile } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
         import { getFirestore, collection, doc, getDoc, getDocs, addDoc, setDoc, updateDoc, deleteDoc, query, where, orderBy, onSnapshot, serverTimestamp, arrayUnion, arrayRemove } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
         
         window.firebaseModules = {
             initializeApp, getAuth, onAuthStateChanged, signOut, getFirestore,
             collection, doc, getDoc, getDocs, addDoc, setDoc, updateDoc, deleteDoc,
-            query, where, orderBy, onSnapshot, serverTimestamp, arrayUnion, arrayRemove, signInWithEmailAndPassword, sendPasswordResetEmail,
+            query, where, orderBy, onSnapshot, serverTimestamp, arrayUnion, arrayRemove, signInWithEmailAndPassword, sendPasswordResetEmail, createUserWithEmailAndPassword, updateProfile,
         };
     </script>
     
@@ -4236,6 +4236,273 @@
             );
         }
         
+        // ============================================
+        // USER MANAGEMENT
+        // ============================================
+        function UserManagement({ showToast }) {
+            const [users, setUsers] = useState([]);
+            const [specialties, setSpecialties] = useState([]);
+            const [loading, setLoading] = useState(true);
+            const [showCreateModal, setShowCreateModal] = useState(false);
+            const [editingUser, setEditingUser] = useState(null);
+            const [searchQuery, setSearchQuery] = useState('');
+            const [filterRole, setFilterRole] = useState('all');
+            const [newUser, setNewUser] = useState({ displayName: '', email: '', password: '', specialty: '', role: 'student' });
+            const [creating, setCreating] = useState(false);
+
+            useEffect(() => { loadUsers(); loadSpecialties(); }, []);
+
+            const loadUsers = async () => {
+                setLoading(true);
+                try {
+                    const { collection, getDocs } = window.firebaseModules;
+                    const snapshot = await getDocs(collection(db, 'users'));
+                    setUsers(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
+                } catch (err) {
+                    console.error('Error loading users:', err);
+                } finally { setLoading(false); }
+            };
+
+            const loadSpecialties = async () => {
+                try {
+                    const { collection, getDocs } = window.firebaseModules;
+                    const snapshot = await getDocs(collection(db, 'specialties'));
+                    const data = snapshot.docs.map(d => ({ id: d.id, ...d.data() })).filter(s => s.isActive !== false).sort((a, b) => a.name.localeCompare(b.name));
+                    setSpecialties(data.length > 0 ? data : HEALTHCARE_POSITIONS.map(p => ({ id: p.value, name: p.value })));
+                } catch (err) {
+                    setSpecialties(HEALTHCARE_POSITIONS.map(p => ({ id: p.value, name: p.value })));
+                }
+            };
+
+            const createUser = async () => {
+                if (!newUser.displayName.trim() || !newUser.email.trim() || !newUser.password.trim()) { showToast('Please fill in all required fields', 'error'); return; }
+                if (newUser.password.length < 6) { showToast('Password must be at least 6 characters', 'error'); return; }
+                setCreating(true);
+                try {
+                    const { createUserWithEmailAndPassword, updateProfile } = window.firebaseModules;
+                    const userCredential = await createUserWithEmailAndPassword(auth, newUser.email.trim(), newUser.password);
+                    await updateProfile(userCredential.user, { displayName: newUser.displayName.trim() });
+                    const { doc, setDoc, serverTimestamp } = window.firebaseModules;
+                    await setDoc(doc(db, 'users', userCredential.user.uid), {
+                        displayName: newUser.displayName.trim(),
+                        email: newUser.email.trim(),
+                        specialty: newUser.specialty,
+                        specialties: newUser.specialty ? [newUser.specialty] : [],
+                        role: newUser.role,
+                        createdAt: serverTimestamp()
+                    });
+                    showToast(`✅ User "${newUser.displayName}" created!`);
+                    setShowCreateModal(false);
+                    setNewUser({ displayName: '', email: '', password: '', specialty: '', role: 'student' });
+                    loadUsers();
+                } catch (err) {
+                    showToast('Failed to create user: ' + (err.message || err), 'error');
+                } finally { setCreating(false); }
+            };
+
+            const saveEditUser = async () => {
+                if (!editingUser.displayName.trim()) { showToast('Display name is required', 'error'); return; }
+                try {
+                    const { doc, updateDoc } = window.firebaseModules;
+                    await updateDoc(doc(db, 'users', editingUser.id), {
+                        displayName: editingUser.displayName.trim(),
+                        specialty: editingUser.specialty || '',
+                        specialties: editingUser.specialty ? [editingUser.specialty] : [],
+                        role: editingUser.role
+                    });
+                    showToast('✅ User updated!');
+                    setEditingUser(null);
+                    loadUsers();
+                } catch (err) { showToast('Failed to update user: ' + err.message, 'error'); }
+            };
+
+            const deleteUser = async (userId, displayName) => {
+                if (!confirm(`Delete "${displayName}"? This removes their Firestore profile but not their Firebase Auth account.`)) return;
+                try {
+                    const { doc, deleteDoc } = window.firebaseModules;
+                    await deleteDoc(doc(db, 'users', userId));
+                    showToast('🗑️ User deleted');
+                    loadUsers();
+                } catch (err) { showToast('Failed to delete user: ' + err.message, 'error'); }
+            };
+
+            const filteredUsers = users.filter(u => {
+                if (filterRole !== 'all' && u.role !== filterRole) return false;
+                if (searchQuery.trim()) {
+                    const q = searchQuery.toLowerCase();
+                    return (u.displayName || '').toLowerCase().includes(q) || (u.email || '').toLowerCase().includes(q);
+                }
+                return true;
+            });
+
+            if (loading) return (
+                <div className="p-8 flex items-center justify-center min-h-screen">
+                    <div className="text-center">
+                        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto mb-4"></div>
+                        <p className="text-gray-600">Loading users...</p>
+                    </div>
+                </div>
+            );
+
+            return (
+                <div className="p-8">
+                    <div className="flex justify-between items-center mb-6">
+                        <h1 className="text-3xl font-bold text-gray-800">👥 User Management</h1>
+                        <button onClick={() => setShowCreateModal(true)} className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-indigo-500 to-purple-600 text-white rounded-lg hover:from-indigo-600 hover:to-purple-700 transition font-semibold">
+                            <Icons.Plus className="w-5 h-5" /> Create User
+                        </button>
+                    </div>
+
+                    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 mb-4 flex flex-wrap gap-3">
+                        <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Search by name or email..." className="flex-1 min-w-[200px] px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none" />
+                        <div className="flex gap-2">
+                            {['all', 'student', 'trainer'].map(r => (
+                                <button key={r} onClick={() => setFilterRole(r)} className={`px-3 py-2 rounded-lg text-sm font-medium transition ${filterRole === r ? 'bg-indigo-600 text-white' : 'bg-gray-50 text-gray-600 border border-gray-200 hover:bg-gray-100'}`}>
+                                    {r === 'all' ? `All (${users.length})` : r === 'student' ? `Students (${users.filter(u => u.role === 'student').length})` : `Trainers (${users.filter(u => u.role === 'trainer').length})`}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    {filteredUsers.length === 0 ? (
+                        <div className="bg-white rounded-xl shadow-sm p-12 text-center">
+                            <div className="text-5xl mb-4">👥</div>
+                            <h3 className="text-lg font-semibold text-gray-700 mb-2">No users found</h3>
+                            <p className="text-gray-500">Try adjusting your search or create a new user</p>
+                        </div>
+                    ) : (
+                        <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                            <table className="w-full">
+                                <thead className="bg-gray-50 border-b border-gray-100">
+                                    <tr>
+                                        <th className="text-left px-4 py-3 text-sm font-semibold text-gray-600">Name</th>
+                                        <th className="text-left px-4 py-3 text-sm font-semibold text-gray-600">Email</th>
+                                        <th className="text-left px-4 py-3 text-sm font-semibold text-gray-600">Specialty</th>
+                                        <th className="text-left px-4 py-3 text-sm font-semibold text-gray-600">Role</th>
+                                        <th className="text-left px-4 py-3 text-sm font-semibold text-gray-600">Joined</th>
+                                        <th className="text-left px-4 py-3 text-sm font-semibold text-gray-600"></th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {filteredUsers.map(u => (
+                                        <tr key={u.id} className="border-b border-gray-50 hover:bg-gray-50">
+                                            <td className="px-4 py-3 font-medium text-gray-800">{u.displayName || '—'}</td>
+                                            <td className="px-4 py-3 text-sm text-gray-600">{u.email}</td>
+                                            <td className="px-4 py-3">
+                                                {((u.specialties && u.specialties.length > 0) ? u.specialties : u.specialty ? [u.specialty] : []).map(s => (
+                                                    <span key={s} className="inline-block mr-1 px-2 py-0.5 bg-indigo-100 text-indigo-700 rounded-full text-xs font-medium">{s}</span>
+                                                ))}
+                                            </td>
+                                            <td className="px-4 py-3">
+                                                <span className={`px-2 py-1 rounded-full text-xs font-semibold ${u.role === 'trainer' ? 'bg-purple-100 text-purple-700' : 'bg-green-100 text-green-700'}`}>
+                                                    {u.role === 'trainer' ? '👨‍🏫 Trainer' : '👨‍🎓 Student'}
+                                                </span>
+                                            </td>
+                                            <td className="px-4 py-3 text-sm text-gray-500">{u.createdAt?.toDate ? u.createdAt.toDate().toLocaleDateString() : '—'}</td>
+                                            <td className="px-4 py-3">
+                                                <div className="flex gap-2">
+                                                    <button onClick={() => setEditingUser({ ...u })} className="px-3 py-1.5 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition"><Icons.Edit className="w-4 h-4" /></button>
+                                                    <button onClick={() => deleteUser(u.id, u.displayName)} className="px-3 py-1.5 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition"><Icons.Trash className="w-4 h-4" /></button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
+
+                    {/* Create User Modal */}
+                    {showCreateModal && (
+                        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                            <div className="bg-white rounded-xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
+                                <div className="sticky top-0 bg-white border-b border-gray-100 px-6 py-4 flex justify-between items-center">
+                                    <h2 className="text-xl font-bold text-gray-800">➕ Create New User</h2>
+                                    <button onClick={() => setShowCreateModal(false)} className="text-gray-400 hover:text-gray-600 text-2xl">✕</button>
+                                </div>
+                                <div className="p-6 space-y-4">
+                                    <div>
+                                        <label className="block text-sm font-semibold text-gray-700 mb-1">Display Name <span className="text-red-500">*</span></label>
+                                        <input type="text" value={newUser.displayName} onChange={e => setNewUser({...newUser, displayName: e.target.value})} className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none" placeholder="Jane Doe" />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-semibold text-gray-700 mb-1">Email <span className="text-red-500">*</span></label>
+                                        <input type="email" value={newUser.email} onChange={e => setNewUser({...newUser, email: e.target.value})} className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none" placeholder="jane@clinic.com" />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-semibold text-gray-700 mb-1">Password <span className="text-red-500">*</span></label>
+                                        <input type="password" value={newUser.password} onChange={e => setNewUser({...newUser, password: e.target.value})} className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none" placeholder="Min 6 characters" />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-semibold text-gray-700 mb-1">Specialty</label>
+                                        <select value={newUser.specialty} onChange={e => setNewUser({...newUser, specialty: e.target.value})} className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                                            <option value="">— Select specialty —</option>
+                                            {specialties.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-semibold text-gray-700 mb-1">Role</label>
+                                        <select value={newUser.role} onChange={e => setNewUser({...newUser, role: e.target.value})} className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                                            <option value="student">👨‍🎓 Student</option>
+                                            <option value="trainer">👨‍🏫 Trainer (Full Admin Access)</option>
+                                        </select>
+                                        {newUser.role === 'trainer' && (
+                                            <div className="mt-2 bg-orange-50 border border-orange-200 rounded-lg p-3 text-xs text-orange-800">⚠️ Trainers have full admin access to all journeys, users, and settings.</div>
+                                        )}
+                                    </div>
+                                </div>
+                                <div className="sticky bottom-0 bg-white border-t border-gray-100 px-6 py-4 flex justify-end gap-3">
+                                    <button onClick={() => setShowCreateModal(false)} className="px-6 py-2 border border-gray-200 text-gray-600 rounded-lg hover:bg-gray-50 transition">Cancel</button>
+                                    <button onClick={createUser} disabled={creating} className="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition font-semibold disabled:opacity-50">{creating ? 'Creating...' : 'Create User'}</button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Edit User Modal */}
+                    {editingUser && (
+                        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                            <div className="bg-white rounded-xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
+                                <div className="sticky top-0 bg-white border-b border-gray-100 px-6 py-4 flex justify-between items-center">
+                                    <h2 className="text-xl font-bold text-gray-800">✏️ Edit User</h2>
+                                    <button onClick={() => setEditingUser(null)} className="text-gray-400 hover:text-gray-600 text-2xl">✕</button>
+                                </div>
+                                <div className="p-6 space-y-4">
+                                    <div>
+                                        <label className="block text-sm font-semibold text-gray-700 mb-1">Display Name</label>
+                                        <input type="text" value={editingUser.displayName || ''} onChange={e => setEditingUser({...editingUser, displayName: e.target.value})} className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none" />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-semibold text-gray-700 mb-1">Email</label>
+                                        <input type="text" value={editingUser.email || ''} disabled className="w-full px-4 py-2 border border-gray-100 rounded-lg bg-gray-50 text-gray-400 cursor-not-allowed" />
+                                        <p className="text-xs text-gray-400 mt-1">Email cannot be changed here</p>
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-semibold text-gray-700 mb-1">Specialty</label>
+                                        <select value={editingUser.specialty || ''} onChange={e => setEditingUser({...editingUser, specialty: e.target.value})} className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                                            <option value="">— Select specialty —</option>
+                                            {specialties.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-semibold text-gray-700 mb-1">Role</label>
+                                        <select value={editingUser.role || 'student'} onChange={e => setEditingUser({...editingUser, role: e.target.value})} className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                                            <option value="student">👨‍🎓 Student</option>
+                                            <option value="trainer">👨‍🏫 Trainer (Full Admin Access)</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div className="sticky bottom-0 bg-white border-t border-gray-100 px-6 py-4 flex justify-end gap-3">
+                                    <button onClick={() => setEditingUser(null)} className="px-6 py-2 border border-gray-200 text-gray-600 rounded-lg hover:bg-gray-50 transition">Cancel</button>
+                                    <button onClick={saveEditUser} className="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition font-semibold">Save Changes</button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
         // ============================================
         // SPECIALTIES MANAGEMENT (admin-managed role/specialty list)
         // ============================================

@@ -217,6 +217,8 @@
             const [error, setError] = useState(_accessDeniedReason || '');
             const [loading, setLoading] = useState(false);
             const [showResetPassword, setShowResetPassword] = useState(false);
+            const [resetEmail, setResetEmail] = useState('');
+            const [resetMessage, setResetMessage] = useState('');
             
             useEffect(() => {
                 const savedEmail = localStorage.getItem('accuro_last_email');
